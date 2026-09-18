@@ -106,7 +106,7 @@ def dhash(data: bytes, size: int = 8) -> int | None:
 
 
 def hash_file(path: str) -> int | None:
-    """dHash of a file's contents, or None if it can't be read/fingerprinted."""
+    """DHash of a file's contents, or None if it can't be read/fingerprinted."""
     try:
         with open(path, "rb") as f:
             return dhash(f.read())
@@ -115,7 +115,7 @@ def hash_file(path: str) -> int | None:
 
 
 def fingerprint_dir(folder: str) -> list[int]:
-    """dHash of every readable image directly in ``folder`` (for reference)."""
+    """DHash of every readable image directly in ``folder`` (for reference)."""
     out: list[int] = []
     for path in list_images(folder):
         h = hash_file(path)

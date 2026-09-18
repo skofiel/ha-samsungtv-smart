@@ -12,14 +12,7 @@ from pysmartthings import Capability, Command
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_ID,
-    CONF_NAME,
-    CONF_PORT,
-    CONF_TOKEN,
-    STATE_OFF,
-)
+from homeassistant.const import CONF_HOST, CONF_ID, CONF_NAME, STATE_OFF
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -27,7 +20,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 
-from . import async_get_samsungtv_api_key
+from . import async_get_samsungtv_api_key, get_or_create_art_api
 from .api.art import SamsungTVAsyncArt
 from .api.ipcontrol import (
     SamsungIPControl,
@@ -42,12 +35,8 @@ from .const import (
     CONF_IP_CONTROL_ART_MODE,
     CONF_IP_CONTROL_TOKEN,
     CONF_IS_FRAME_TV,
-    CONF_WS_NAME,
-    DATA_ART_API,
     DATA_CFG,
-    DEFAULT_PORT,
     DOMAIN,
-    WS_PREFIX,
     ip_control_port,
 )
 
@@ -84,9 +73,6 @@ async def async_setup_entry(
     """Set up the Samsung Frame Art Mode switch from config entry."""
     config = hass.data[DOMAIN][entry.entry_id][DATA_CFG]
     host = config[CONF_HOST]
-    port = config.get(CONF_PORT, DEFAULT_PORT)
-    token = config.get(CONF_TOKEN)
-    ws_name = config.get(CONF_WS_NAME, "HomeAssistant")
 
     # Get device unique ID - must match entity.py logic for device grouping
     device_unique_id = config.get(CONF_ID, entry.entry_id)
@@ -130,22 +116,11 @@ async def async_setup_entry(
         "yes" if (api_key and device_id) else "no — WebSocket fallback",
     )
 
-    # Reuse the shared Art API instance if present (created in __init__.py),
-    # otherwise create a fallback one. Either way, decide whether to create the
-    # Art Mode switch from the actual Frame-TV support check below — NOT from
-    # whether the shared instance happens to exist: it is now created for every
-    # TV (Frame or not) before platforms load, so its presence no longer implies
-    # Frame support.
-    art_api = hass.data[DOMAIN][entry.entry_id].get(DATA_ART_API)
-    if art_api is None:
-        art_api = SamsungTVAsyncArt(
-            host=host,
-            port=port,
-            token=token,
-            session=session,
-            timeout=5,
-            name=f"{WS_PREFIX} {ws_name} Art",
-        )
+    # One shared Art API instance per entry (see get_or_create_art_api).
+    # Whether to create the Art Mode switch comes from the Frame-TV support
+    # check below, NOT from whether that instance exists: it is created for
+    # every TV, Frame or not, so its presence implies nothing about support.
+    art_api = get_or_create_art_api(hass, entry)
 
     # Use persisted flag if available, otherwise probe live
     is_frame_tv_cached = entry.data.get(CONF_IS_FRAME_TV, False)
@@ -156,7 +131,7 @@ async def async_setup_entry(
         try:
             async with asyncio.timeout(5):
                 is_supported = await art_api.supported()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug("Timeout checking Frame TV support for %s", host)
             is_supported = False
         except Exception as ex:
@@ -169,8 +144,6 @@ async def async_setup_entry(
             host,
         )
     else:
-        # Store for later use (no-op when already the shared instance)
-        hass.data[DOMAIN][entry.entry_id][DATA_ART_API] = art_api
         # Add Art Mode switch
         entities.append(
             FrameArtModeSwitch(
@@ -456,6 +429,7 @@ class FrameArtModeSwitch(SwitchEntity):
         """Wait for TV to be ready after turning on."""
         self._log.debug("Waiting for TV to be ready (max %ds)...", max_wait)
 
+        not_ready_reason: Exception | None = None
         for i in range(max_wait):
             await asyncio.sleep(1)
 
@@ -466,10 +440,15 @@ class FrameArtModeSwitch(SwitchEntity):
                     if is_supported:
                         self._log.debug("TV ready after %d seconds", i + 1)
                         return True
-            except Exception:
-                pass
+            except Exception as ex:  # noqa: BLE001 - the TV is simply not up yet
+                not_ready_reason = ex
 
-            self._log.debug("TV not ready yet, waiting... (%d/%d)", i + 1, max_wait)
+            self._log.debug(
+                "TV not ready yet, waiting... (%d/%d): %s",
+                i + 1,
+                max_wait,
+                not_ready_reason,
+            )
 
         self._log.warning("TV did not become ready within %d seconds", max_wait)
         return False
@@ -619,8 +598,14 @@ class FrameArtModeSwitch(SwitchEntity):
                                 self._available = True
                                 self.async_write_ha_state()
                                 return
-                        except Exception:
-                            pass
+                        except Exception as ex:  # noqa: BLE001 - retried below
+                            self._log.debug(
+                                "Art Mode verification read failed on attempt "
+                                "%d/%d: %s",
+                                attempt + 1,
+                                max_retries,
+                                ex,
+                            )
 
                         if attempt < max_retries - 1:
                             self._log.debug("Retrying in %d seconds...", retry_delay)
@@ -633,7 +618,7 @@ class FrameArtModeSwitch(SwitchEntity):
                 self._log.warning("Art Mode for %s: %s", self._device_name, ex)
                 self.async_write_ha_state()
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.debug("Timeout on attempt %d/%d", attempt + 1, max_retries)
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
@@ -714,7 +699,7 @@ class FrameArtModeSwitch(SwitchEntity):
                 self._log.warning("Art Mode for %s: %s", self._device_name, ex)
                 self.async_write_ha_state()
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.debug("Timeout on attempt %d/%d", attempt + 1, max_retries)
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
@@ -814,7 +799,7 @@ class FrameArtModeSwitch(SwitchEntity):
                         )
                     else:
                         self._log.debug("Could not get Art Mode state")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.debug("Timeout updating Art Mode state")
             # Don't mark as unavailable on timeout - TV might be off
         except Exception as ex:

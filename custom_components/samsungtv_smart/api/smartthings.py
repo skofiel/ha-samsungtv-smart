@@ -435,7 +435,7 @@ class SmartThingsTV:
         if self._source_list:
             self._log.debug(
                 "Samsung TV: sources loaded: %s",
-                {k: v for k, v in self._source_list_map.items()},
+                dict(self._source_list_map.items()),
             )
         else:
             self._log.debug("Samsung TV: no sources available after update")

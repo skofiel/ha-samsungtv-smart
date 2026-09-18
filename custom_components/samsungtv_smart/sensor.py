@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
+import os
 import time
 from typing import Any
 
@@ -22,8 +24,6 @@ from homeassistant.const import (
     CONF_HOST,
     CONF_ID,
     CONF_NAME,
-    CONF_PORT,
-    CONF_TOKEN,
     LIGHT_LUX,
     EntityCategory,
     UnitOfEnergy,
@@ -41,7 +41,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from . import async_get_samsungtv_api_key
+from . import async_get_samsungtv_api_key, get_or_create_art_api
 from .api.art import SamsungTVAsyncArt, _DeviceLoggerAdapter
 from .api.ipcontrol import (
     SamsungIPControl,
@@ -63,17 +63,13 @@ from .const import (
     CONF_OAUTH_TOKEN,
     CONF_SLIDESHOW_API,
     CONF_ST_POLL_ON_INTERVAL,
-    CONF_WS_NAME,
-    DATA_ART_API,
     DATA_CFG,
     DATA_IP_CONTROL_STATE_COORDINATOR,
     DEFAULT_IP_CONTROL_POLL_INTERVAL,
-    DEFAULT_PORT,
     DEFAULT_ST_POLL_ON_INTERVAL,
     DOMAIN,
     ST_POLL_OFF_INTERVAL,
     TUNER_INPUT_SOURCES,
-    WS_PREFIX,
     ip_control_port,
 )
 from .token_notify import METHOD_IP_CONTROL, clear_token_problem, notify_token_problem
@@ -276,9 +272,6 @@ async def async_setup_entry(  # noqa: C901
     """Set up the Samsung Frame Art sensor from config entry."""
     config = hass.data[DOMAIN][entry.entry_id][DATA_CFG]
     host = config[CONF_HOST]
-    port = config.get(CONF_PORT, DEFAULT_PORT)
-    token = config.get(CONF_TOKEN)
-    ws_name = config.get(CONF_WS_NAME, "HomeAssistant")
 
     # Get device unique ID - must match entity.py logic for device grouping
     device_unique_id = config.get(CONF_ID, entry.entry_id)
@@ -318,16 +311,7 @@ async def async_setup_entry(  # noqa: C901
     # Reuse the shared Art API instance (created in __init__.py) so all
     # platforms talk over a single art-app WebSocket; the TV misbehaves with
     # multiple clients on that channel. Create one only as a fallback.
-    art_api = hass.data[DOMAIN][entry.entry_id].get(DATA_ART_API)
-    if not art_api:
-        art_api = SamsungTVAsyncArt(
-            host=host,
-            port=port,
-            token=token,
-            session=session,
-            timeout=5,
-            name=f"{WS_PREFIX} {ws_name} Art",
-        )
+    art_api = get_or_create_art_api(hass, entry)
 
     # Check Frame TV support:
     # If already confirmed as a Frame TV (persisted flag), skip the live check.
@@ -345,7 +329,7 @@ async def async_setup_entry(  # noqa: C901
         try:
             async with asyncio.timeout(5):
                 is_supported = await art_api.supported()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug("Timeout checking Frame TV support for %s", host)
             is_supported = False
         except Exception as ex:
@@ -362,18 +346,19 @@ async def async_setup_entry(  # noqa: C901
             )
 
     if is_supported:
-        # Create www/frame_art/{entry_id} directory if it doesn't exist
-        import os
-
+        # Create www/frame_art/{entry_id} directory if it doesn't exist.
+        # makedirs hits the filesystem, and this runs in the event loop during
+        # platform setup, so it goes to the executor.
         www_path = hass.config.path("www", "frame_art", entry.entry_id)
-        try:
-            os.makedirs(www_path, exist_ok=True)
-            _LOGGER.debug("Frame Art directory ready: %s", www_path)
-        except Exception as ex:
-            _LOGGER.warning("Could not create frame_art directory: %s", ex)
 
-        # Store art_api in hass.data for sharing with media_player
-        hass.data[DOMAIN][entry.entry_id][DATA_ART_API] = art_api
+        def _ensure_frame_art_dir() -> None:
+            try:
+                os.makedirs(www_path, exist_ok=True)
+                _LOGGER.debug("Frame Art directory ready: %s", www_path)
+            except OSError as ex:
+                _LOGGER.warning("Could not create frame_art directory: %s", ex)
+
+        await hass.async_add_executor_job(_ensure_frame_art_dir)
 
         # Create the coordinator
         coordinator = FrameArtCoordinator(hass, art_api, entry)
@@ -756,7 +741,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                         art_mode = await self._art_api.get_artmode()
                         data["art_mode"] = art_mode
                         self._log.debug("Frame Art: Direct API art_mode: %s", art_mode)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     self._log.debug("Timeout getting art mode status")
                 except Exception as ex:
                     self._log.debug("Error getting art mode: %s", ex)
@@ -787,7 +772,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                                     raw_content_id,
                                 )
                             content_id = None
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.debug("Timeout getting current artwork")
             except Exception as ex:
                 self._log.debug("Error getting current artwork: %s", ex)
@@ -885,7 +870,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                     async with asyncio.timeout(15):
                         artwork_list = await self._art_api.available()
                         data["artwork_count"] = len(artwork_list) if artwork_list else 0
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     self._log.debug("Timeout getting artwork list")
                 except Exception as ex:
                     self._log.debug("Error getting artwork list: %s", ex)
@@ -920,7 +905,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                             "Frame Art: slideshow API detection inconclusive "
                             "(neither endpoint responded); will retry next cycle"
                         )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     self._log.debug("Frame Art: timeout during slideshow API detection")
                 except Exception as ex:  # noqa: BLE001
                     self._log.debug(
@@ -936,7 +921,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                         slideshow = await self._art_api.get_slideshow_status()
                     if slideshow:
                         data["slideshow_status"] = slideshow.get("value", "off")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.debug("Timeout getting slideshow status")
             except Exception as ex:
                 self._log.debug("Error getting slideshow status: %s", ex)
@@ -1062,8 +1047,6 @@ class FrameArtCoordinator(DataUpdateCoordinator):
 
     def _has_current_thumbnail(self) -> bool:
         """Check if current thumbnail file exists."""
-        import os
-
         www_path = self._hass.config.path(
             "www", "frame_art", self._entry.entry_id, "current.jpg"
         )
@@ -1269,8 +1252,6 @@ class FrameArtCoordinator(DataUpdateCoordinator):
         transport issue (TV busy, WebSocket lag, Art API returning empty data).
         """
         try:
-            import os
-
             www_path = self._hass.config.path("www", "frame_art", self._entry.entry_id)
 
             def _write_placeholder():
@@ -1291,10 +1272,8 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                 # Clean up legacy DRM marker from previous versions
                 legacy_marker = os.path.join(www_path, "current_drm.txt")
                 if os.path.exists(legacy_marker):
-                    try:
+                    with contextlib.suppress(OSError):
                         os.remove(legacy_marker)
-                    except OSError:
-                        pass
 
                 return file_path
 
@@ -1322,8 +1301,6 @@ class FrameArtCoordinator(DataUpdateCoordinator):
         failure, left quietly for the next ``image_added`` / ``image_selected``
         broadcast to retrigger.
         """
-        import os
-
         # Fast path: if this artwork's thumbnail was already downloaded in a
         # previous cycle (personal/store/other), promote that local copy to
         # current.jpg straight away and skip the live TV fetch. Downloaded
@@ -1380,7 +1357,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                         last_error,
                     )
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 last_error = "timeout (15s)"
                 self._log.debug(
                     "Frame Art: Timeout on attempt %d/%d for %s",
@@ -1411,10 +1388,8 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                 for marker_name in ("current_error.txt", "current_drm.txt"):
                     marker_path = os.path.join(www_path, marker_name)
                     if os.path.exists(marker_path):
-                        try:
+                        with contextlib.suppress(OSError):
                             os.remove(marker_path)
-                        except OSError:
-                            pass
 
                 # Save as current.jpg
                 file_path = os.path.join(www_path, "current.jpg")
@@ -1528,7 +1503,6 @@ class FrameArtCoordinator(DataUpdateCoordinator):
 
         Returns True if a cached copy was found and promoted to current.jpg.
         """
-        import os
         import shutil
 
         www_path = self._hass.config.path("www", "frame_art", self._entry.entry_id)
@@ -1546,10 +1520,8 @@ class FrameArtCoordinator(DataUpdateCoordinator):
             for marker_name in ("current_error.txt", "current_drm.txt"):
                 marker_path = os.path.join(www_path, marker_name)
                 if os.path.exists(marker_path):
-                    try:
+                    with contextlib.suppress(OSError):
                         os.remove(marker_path)
-                    except OSError:
-                        pass
             return True
 
         try:
@@ -1821,8 +1793,6 @@ class FrameArtFolderSensor(SensorEntity):
 
     async def async_update(self) -> None:
         """Scan the subdirectory and refresh file list + total size."""
-        import os
-
         www_path = self.hass.config.path(
             "www", "frame_art", self._entry.entry_id, self._subdir
         )
@@ -1836,10 +1806,8 @@ class FrameArtFolderSensor(SensorEntity):
                 if fname.lower().endswith(".jpg"):
                     fpath = os.path.join(www_path, fname)
                     files.append(fpath)
-                    try:
+                    with contextlib.suppress(OSError):
                         total += os.path.getsize(fpath)
-                    except OSError:
-                        pass
             return files, total
 
         self._files, self._total_bytes = await self.hass.async_add_executor_job(_scan)
@@ -2172,8 +2140,6 @@ class FrameArtSensor(CoordinatorEntity, SensorEntity):
         try:
             thumbnail_data = await self._art_api.get_thumbnail(content_id, timeout=30)
             if thumbnail_data:
-                import os
-
                 www_path = self.hass.config.path(
                     "www", "frame_art", self._entry.entry_id
                 )

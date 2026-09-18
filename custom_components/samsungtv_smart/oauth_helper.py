@@ -125,6 +125,7 @@ async def async_get_api_key(hass: HomeAssistant, entry: ConfigEntry) -> str | No
 
     Returns:
         Access token string if available, None otherwise
+
     """
     auth_method = entry.data.get(CONF_AUTH_METHOD, AUTH_METHOD_PAT)
 
@@ -163,6 +164,7 @@ async def async_validate_token(hass: HomeAssistant, token: str) -> bool:
 
     Returns:
         True if token is valid, False otherwise
+
     """
     if not token:
         return False

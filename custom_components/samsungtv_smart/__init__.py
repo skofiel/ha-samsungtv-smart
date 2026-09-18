@@ -326,8 +326,8 @@ def tv_url(host: str, address: str = "") -> str:
 
 def is_min_ha_version(min_ha_major_ver: int, min_ha_minor_ver: int) -> bool:
     """Check if HA version at least a specific version."""
-    return MAJOR_VERSION > min_ha_major_ver or (
-        MAJOR_VERSION == min_ha_major_ver and MINOR_VERSION >= min_ha_minor_ver
+    return min_ha_major_ver < MAJOR_VERSION or (
+        min_ha_major_ver == MAJOR_VERSION and min_ha_minor_ver <= MINOR_VERSION
     )
 
 
@@ -399,7 +399,7 @@ def _migrate_token(hass: HomeAssistant, entry: ConfigEntry, hostname: str) -> No
             return
 
     try:
-        with open(token_file, "r", encoding="utf-8") as os_token_file:
+        with open(token_file, encoding="utf-8") as os_token_file:
             token = os_token_file.readline()
     except Exception as exc:  # pylint: disable=broad-except
         _LOGGER.error("Error reading token file %s: %s", token_file, str(exc))
@@ -596,6 +596,7 @@ async def async_get_samsungtv_api_key(  # noqa: C901
 
     Returns:
         API key/access token string if available, None otherwise
+
     """
     auth_method = entry.data.get(CONF_AUTH_METHOD)
 
@@ -793,14 +794,25 @@ async def _register_logo_paths(hass: HomeAssistant) -> str | None:
 
     local_logo_path = Path(hass.config.path("www", f"{DOMAIN}_logos"))
     url_logo_path = str(local_logo_path)
-    if not local_logo_path.exists():
+
+    def _ensure_logo_dir() -> bool:
+        """Create the custom-logo folder if absent (executor: touches disk)."""
+        if local_logo_path.exists():
+            return True
         try:
             local_logo_path.mkdir(parents=True)
         except Exception as exc:  # pylint: disable=broad-except
             _LOGGER.warning(
                 "Error registering custom logo folder %s: %s", str(local_logo_path), exc
             )
-            url_logo_path = None
+            return False
+        return True
+
+    # exists() and mkdir() both hit the filesystem, and this runs during setup
+    # in the event loop; on slow or network-backed storage that is exactly what
+    # Home Assistant's blocking-call detector flags.
+    if not await hass.async_add_executor_job(_ensure_logo_dir):
+        url_logo_path = None
 
     if url_logo_path is not None:
         static_paths.append(
@@ -917,12 +929,11 @@ async def _register_bundled_card(hass: HomeAssistant, filename: str) -> None:
 async def get_device_info(hostname: str, session: ClientSession) -> dict:
     """Try retrieve device information"""
     try:
-        async with async_timeout.timeout(2):
-            async with session.get(
-                tv_url(host=hostname), raise_for_status=True
-            ) as resp:
-                info = await resp.json()
-    except (asyncio.TimeoutError, ClientConnectionError):
+        async with async_timeout.timeout(2), session.get(
+            tv_url(host=hostname), raise_for_status=True
+        ) as resp:
+            info = await resp.json()
+    except (TimeoutError, ClientConnectionError):
         _LOGGER.warning("Error getting HTTP device info for TV: %s", hostname)
         return {}
 
@@ -1124,12 +1135,18 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     _legacy = hass.config.path(
         "custom_components", "samsungtv_smart", "translations_en.json"
     )
-    if os.path.isfile(_legacy):
+
+    def _remove_legacy_translations() -> None:
+        """Delete the obsolete file if present (executor: touches disk)."""
+        if not os.path.isfile(_legacy):
+            return
         try:
             os.remove(_legacy)
             _LOGGER.info("Removed obsolete translations_en.json")
         except OSError as ex:
             _LOGGER.debug("Could not remove translations_en.json: %s", ex)
+
+    await hass.async_add_executor_job(_remove_legacy_translations)
 
     if not is_valid_ha_version():
         msg = (
@@ -1264,7 +1281,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # com.samsung.art-app channel make it route d2d_service_message responses
     # unpredictably and eventually stop handshaking new connections, so art
     # mode detection silently dies. One instance here, everyone reuses it.
-    hass.data[DOMAIN][entry.entry_id][DATA_ART_API] = SamsungTVAsyncArt(
+    get_or_create_art_api(hass, entry)
+
+    await hass.config_entries.async_forward_entry_setups(entry, SAMSMART_PLATFORM)
+
+    return True
+
+
+def get_or_create_art_api(hass: HomeAssistant, entry: ConfigEntry) -> SamsungTVAsyncArt:
+    """Return the one art client for this entry, creating it if it is missing.
+
+    The TV's ``com.samsung.art-app`` channel tolerates a single client: with
+    more than one it routes ``d2d_service_message`` responses unpredictably and
+    eventually stops handshaking new connections, and art mode detection
+    silently dies.
+
+    async_setup_entry calls this before forwarding platforms, so every later
+    caller just gets the same object back. It exists because three platforms
+    also carried their own "create one on a miss" fallback with slightly
+    different arguments — and media_player's never stored what it built, so a
+    miss produced a second, invisible client *and* skipped the
+    disable_art_thread() call that stops the legacy WebSocket art thread,
+    leaving a third contender on the same channel.
+    """
+    store = hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
+    if (art_api := store.get(DATA_ART_API)) is not None:
+        return art_api
+
+    config = store.get(DATA_CFG) or dict(entry.data)
+    art_api = SamsungTVAsyncArt(
         host=config[CONF_HOST],
         port=config.get(CONF_PORT, DEFAULT_PORT),
         token=config.get(CONF_TOKEN),
@@ -1276,10 +1321,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             CONF_SUPPORTS_GET_COLOR_TEMPERATURE
         ),
     )
-
-    await hass.config_entries.async_forward_entry_setups(entry, SAMSMART_PLATFORM)
-
-    return True
+    store[DATA_ART_API] = art_api
+    return art_api
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

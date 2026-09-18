@@ -8,7 +8,6 @@ from datetime import timedelta
 from enum import Enum
 import logging
 import os
-from socket import error as socketError
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -705,17 +704,23 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         )
         self._rest_api.register_port_callback(self._persist_rest_port)
 
-        # Frame Art API - use shared instance if available, otherwise create new one
-        shared_art_api = entry_data.get(DATA_ART_API) if entry_data else None
-        if shared_art_api:
-            self._art_api = shared_art_api
-            self._log.debug("Using shared Frame Art API instance")
-            # Disable the old SamsungArt thread in samsungws.py to prevent
-            # competing WebSocket connections on the art-app channel.
-            # Multiple clients cause the TV to route d2d_service_message
-            # responses unpredictably, resulting in art.py timeouts.
-            self._ws.disable_art_thread()
-        else:
+        # The one Art API instance for this entry. async_setup_entry creates it
+        # before forwarding platforms, so this normally just picks it up.
+        #
+        # The previous fallback built its own on a miss and — unlike the sensor
+        # and switch fallbacks — never stored it, so a miss produced a second,
+        # invisible client on a channel that tolerates exactly one. It also sat
+        # in an else branch that skipped disable_art_thread(), leaving the
+        # legacy WebSocket art thread running as a third contender. Registering
+        # whatever we build keeps the invariant either way.
+        self._art_api = entry_data.get(DATA_ART_API) if entry_data else None
+        if self._art_api is None:
+            self._log.error(
+                "Frame Art API missing from hass.data for %s; creating and "
+                "registering one. This means async_setup_entry did not run "
+                "first, which should not happen",
+                self._host,
+            )
             self._art_api = SamsungTVAsyncArt(
                 host=self._host,
                 port=config.get(CONF_PORT, DEFAULT_PORT),
@@ -728,6 +733,12 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     CONF_SUPPORTS_GET_COLOR_TEMPERATURE
                 ),
             )
+            if entry_data is not None:
+                entry_data[DATA_ART_API] = self._art_api
+        # Stop the legacy SamsungArt thread in samsungws.py either way: two
+        # clients on the art-app channel make the TV route d2d_service_message
+        # responses unpredictably, which shows up as 100% timeouts in art.py.
+        self._ws.disable_art_thread()
         self._art_api.register_capability_callback(self._persist_art_capability)
         self._art_api.register_port_callback(self._persist_art_port)
         self._art_api.register_art_event_callback(self._on_art_transition)
@@ -1772,6 +1783,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             SKCwdZ5Hxp.swisscombluetv -> Swisscom Blue TV
             HEPsqFNie0.tvplusstandalone -> TV Plus
             org.tizen.netflix-app -> Netflix
+
         """
         import re
 
@@ -1914,8 +1926,10 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     name = source_name if source_name != source_id else ""
                     st_source_list[name or source_id] = input_type
 
-            except Exception:  # pylint: disable=broad-except
-                pass
+            except Exception as ex:  # noqa: BLE001 - skip this source only
+                self._log.debug(
+                    "Skipping unparseable SmartThings source %s: %s", source_id, ex
+                )
 
         if len(st_source_list) > 0:
             self._log.info(
@@ -1964,8 +1978,8 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     app_id + ST_APP_SEPARATOR + st_app_id if st_app_id else app_id
                 )
 
-            except Exception:  # pylint: disable=broad-except
-                pass
+            except Exception as ex:  # noqa: BLE001 - skip this app only
+                self._log.debug("Skipping unparseable app entry: %s", ex)
 
         if self._app_list is None:
             self._app_list = filtered_app_list
@@ -1999,6 +2013,21 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         getTVStates, not the wedge-prone artModeControl flag.
         """
         coordinator = self._get_ip_control_state_coordinator()
+        # A DataUpdateCoordinator keeps serving its last successful payload
+        # after a failed refresh, so a TV that stopped answering would go on
+        # reporting whatever pictureMode it held when it was last reachable, for
+        # as long as it stayed unreachable — the same freeze this read exists to
+        # prevent, one layer down. A failed last poll means "not readable", and
+        # the caller falls through to the independent power sources.
+        #
+        # _get_ip_control_input_source and _get_ip_control_channel read the same
+        # snapshot and go stale the same way. They are deliberately left alone:
+        # blanking the source or the channel number the moment a poll fails is a
+        # different trade-off from the one being made here (falling through to
+        # another art signal), and belongs with a change that can be judged on
+        # its own.
+        if not getattr(coordinator, "last_update_success", True):
+            return None
         data = getattr(coordinator, "data", None)
         if not isinstance(data, dict) or data.get("powered_off"):
             return None
@@ -2301,11 +2330,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         try:
             async with async_timeout.timeout(ST_UPDATE_TIMEOUT):
                 await self._st.async_device_update(self._use_channel_info)
-        except (
-            asyncio.TimeoutError,
-            ClientConnectionError,
-            ClientResponseError,
-        ) as exc:
+        except (TimeoutError, ClientConnectionError, ClientResponseError) as exc:
             self._log.debug("%s - SmartThings error: [%s]", self.entity_id, exc)
             self._st_last_exc = exc
             return False
@@ -2861,7 +2886,17 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         art_api = (
             self.hass.data.get(DOMAIN, {}).get(self._entry_id, {}).get(DATA_ART_API)
         )
-        if art_api is not None and art_api.art_mode is not None:
+        # Only while the art channel is actually open. art_mode is pushed by
+        # art_mode_changed / go_to_standby broadcasts on that socket, so once it
+        # closes the value stops being maintained and simply keeps whatever it
+        # last held — the mechanism behind art_mode_status freezing for hours
+        # (#248). Falling through to the independent power sources, or to None,
+        # beats reporting a value that nothing is updating.
+        if (
+            art_api is not None
+            and art_api.art_mode is not None
+            and art_api.is_connected
+        ):
             if not art_api.art_mode and self._smartthings_reports_art():
                 return True
             return art_api.art_mode
@@ -3066,7 +3101,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             try:
                 send_magic_packet(self._mac, ip_address=ip_address)
                 send_success = True
-            except socketError as exc:
+            except OSError as exc:
                 self._log.warning(
                     "Failed tentative n.%s to send WOL packet: %s",
                     i,
@@ -3744,8 +3779,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         return video_id
 
     def _cast_youtube_video(self, video_id: str, enqueue: MediaPlayerEnqueue):
-        """
-        Cast a youtube video using samsungcast library.
+        """Cast a youtube video using samsungcast library.
         This method is sync and must run in job executor.
         """
         if enqueue == MediaPlayerEnqueue.PLAY:
@@ -4297,6 +4331,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
         Returns:
             bool: True if TV is ready in Art Mode, False if failed
+
         """
         # Fast path: if the TV is already in Art Mode, there is nothing to do.
         # A Frame in Art Mode reports media_player state OFF, so we must NOT
@@ -4497,7 +4532,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             )
             return False
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.error("Frame Art: Timeout checking/activating Art Mode")
             return False
         except Exception as ex:
@@ -4555,7 +4590,8 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
         def _ids(entries, key: str) -> set[str]:
             """Names from a matte list, which is dicts on some models, strings
-            on others — the same shape the matte selects handle."""
+            on others — the same shape the matte selects handle.
+            """
             out: set[str] = set()
             for entry in entries or []:
                 value = entry.get(key) if isinstance(entry, dict) else entry
@@ -4963,6 +4999,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
         Returns:
             List of removed file paths
+
         """
         removed_files = []
 

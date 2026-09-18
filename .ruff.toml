@@ -1,7 +1,13 @@
-# The contents of this file is based on https://github.com/home-assistant/core/blob/dev/pyproject.toml
+# Based on https://github.com/home-assistant/core/blob/dev/pyproject.toml
+#
+# Home Assistant 2025.6 requires Python 3.13, which is also what the Tests and
+# Linting workflows run, so that is the target here too. It was "py310", which
+# held back the pyupgrade rewrites below.
+target-version = "py313"
 
-target-version = "py310"
-
+[lint]
+# These used to sit at the top level of this file, where current ruff only
+# honours them with a deprecation warning on every run.
 select = [
     "B007", # Loop control variable {name} not used within loop body
     "B014", # Exception handler with duplicate exception
@@ -36,13 +42,36 @@ ignore = [
     "D411",  # Missing blank line before section
     "E501",  # line too long
     "E731",  # do not assign a lambda expression, use a def
+
+    # --- Staged debt -----------------------------------------------------
+    # This config shipped with the repository and no workflow ever ran it, so
+    # its rules had never been applied. Everything else it flags is now fixed
+    # and ruff runs in CI; these 111 findings are all docstring style, and the
+    # honest way to clear them is one module at a time by someone who can say
+    # what each function does. Writing a hundred filler docstrings to turn a
+    # linter green makes the code worse. Delete entries from this block as
+    # modules are cleaned up.
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D105",  # Missing docstring in magic method
+    "D107",  # Missing docstring in __init__
+    "D205",  # 1 blank line required between summary line and description
+    "D400",  # First line should end with a period
+    "D401",  # First line of docstring should be in imperative mood
+    "D415",  # First line should end with a period, question mark, or point
 ]
 
-[flake8-pytest-style]
+[lint.flake8-pytest-style]
 fixture-parentheses = false
 
-[pyupgrade]
+[lint.pyupgrade]
 keep-runtime-typing = true
 
-[mccabe]
+[lint.mccabe]
 max-complexity = 25
+
+[lint.per-file-ignores]
+# Test functions carry their intent in the name (and usually a docstring where
+# the name is not enough); requiring one on every single case adds noise
+# without adding meaning.
+"tests/**" = ["D103"]

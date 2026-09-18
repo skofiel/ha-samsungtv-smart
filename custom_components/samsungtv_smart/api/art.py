@@ -1,5 +1,4 @@
-"""
-Samsung Frame TV Art Mode API wrapper for Home Assistant.
+"""Samsung Frame TV Art Mode API wrapper for Home Assistant.
 
 Based on xchwarze/samsung-tv-ws-api art-updates branch
 https://github.com/xchwarze/samsung-tv-ws-api/tree/art-updates
@@ -372,6 +371,27 @@ class SamsungTVAsyncArt:
                 self._log.debug("Art API: art-content callback raised", exc_info=True)
 
     @property
+    def is_connected(self) -> bool:
+        """Whether the art channel is live, and so whether art_mode is current.
+
+        ``art_mode`` is maintained by ``art_mode_changed`` / ``go_to_standby``
+        broadcasts arriving on this socket, and by nothing else. When the socket
+        is gone, the attribute keeps whatever it last held with nothing to
+        update it — which is how ``art_mode_status`` could sit frozen at a
+        pre-transition value for hours (#248 measured four stretches of 7-10 h
+        with artwork on screen and the attribute stuck at "off").
+
+        ``_receive_loop`` clears the cached value when it exits normally, but
+        that is only one of the ways this channel dies: the bounded force-close
+        of a transport that ignored ``close()``, and a send failure marking the
+        channel dead, both drop the connection without going through it. Rather
+        than invalidate from each of those paths — and from whichever is added
+        next — callers gate on this, which is true only while a socket is
+        actually open.
+        """
+        return self._connected and self._ws is not None and not self._ws.closed
+
+    @property
     def _ws_url(self) -> str:
         """Get the WebSocket URL for the art API.
 
@@ -415,8 +435,8 @@ class SamsungTVAsyncArt:
                 try:
                     if not self._ws.closed:
                         await self._ws.close()
-                except Exception:  # pylint: disable=broad-except
-                    pass
+                except Exception as ex:  # noqa: BLE001 - discarding it regardless
+                    self._log.debug("Art API: closing the stale socket failed: %s", ex)
                 self._ws = None
                 if self._recv_task and not self._recv_task.done():
                     self._recv_task.cancel()
@@ -576,7 +596,7 @@ class SamsungTVAsyncArt:
                         aiohttp.WSMsgType.ERROR,
                     ):
                         break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
 
             if not connected:
@@ -900,7 +920,7 @@ class SamsungTVAsyncArt:
             self._timeout_streak = 0
             self._got_response_since_connect = True
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.debug("Art API: Timeout waiting for '%s'", request_key)
             self._note_request_timeout()
             return None
@@ -1136,8 +1156,8 @@ class SamsungTVAsyncArt:
                         data = await resp.json()
                         device = data.get("device", {})
                         return device.get("PowerState", "off") == "on"
-        except Exception:
-            pass
+        except Exception as ex:  # noqa: BLE001 - an unreachable TV reads as off
+            self._log.debug("Art API: power probe failed for %s: %s", self._host, ex)
         return False
 
     async def is_artmode(self) -> bool:
@@ -1298,7 +1318,7 @@ class SamsungTVAsyncArt:
                 await writer.wait_closed()
                 self._log.debug("Art API: Thumbnail socket closed")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.debug("Art API: Timeout connecting to thumbnail socket")
             return {}
         except asyncio.IncompleteReadError as ex:
@@ -1444,7 +1464,7 @@ class SamsungTVAsyncArt:
                 writer.close()
                 await writer.wait_closed()
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.debug("Art API: Timeout getting thumbnail")
             return None
         except Exception as ex:
@@ -2041,7 +2061,7 @@ class SamsungTVAsyncArt:
         try:
             async with asyncio.timeout(timeout):
                 slideshow_ok = _is_usable(await self.get_slideshow_status())
-        except (asyncio.TimeoutError, Exception) as ex:  # noqa: BLE001
+        except (TimeoutError, Exception) as ex:  # noqa: BLE001
             self._log.debug(
                 "Art API: detect_slideshow_api: get_slideshow_status probe failed: %s",
                 ex,
@@ -2051,7 +2071,7 @@ class SamsungTVAsyncArt:
         try:
             async with asyncio.timeout(timeout):
                 auto_rotation_ok = _is_usable(await self.get_auto_rotation_status())
-        except (asyncio.TimeoutError, Exception) as ex:  # noqa: BLE001
+        except (TimeoutError, Exception) as ex:  # noqa: BLE001
             self._log.debug(
                 "Art API: detect_slideshow_api: get_auto_rotation_status probe failed: %s",
                 ex,
@@ -2243,7 +2263,7 @@ class SamsungTVAsyncArt:
                     timeout=10,
                 )
                 self._log.debug("Art API: Connected for upload")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.error("Art API: Timeout connecting for upload")
                 return None
             except Exception as ex:
@@ -2413,7 +2433,7 @@ class SamsungTVAsyncArt:
 
     # ==================== Context Manager ====================
 
-    async def __aenter__(self) -> "SamsungTVAsyncArt":
+    async def __aenter__(self) -> SamsungTVAsyncArt:
         """Async context manager entry."""
         await self.open()
         return self
