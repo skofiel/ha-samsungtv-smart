@@ -255,6 +255,74 @@
       "reboot": {
         "name": "Reboot TV"
       }
+    },
+    "number": {
+      "backlight": {
+        "name": "Backlight"
+      },
+      "contrast": {
+        "name": "Contrast"
+      },
+      "brightness": {
+        "name": "Brightness"
+      },
+      "sharpness": {
+        "name": "Sharpness"
+      },
+      "color": {
+        "name": "Color"
+      },
+      "tint": {
+        "name": "Tint"
+      },
+      "art_brightness": {
+        "name": "Art Mode Brightness"
+      },
+      "art_color_temperature": {
+        "name": "Art Mode Color Temperature"
+      }
+    },
+    "select": {
+      "color_tone": {
+        "name": "Color Tone"
+      },
+      "speaker_select": {
+        "name": "Speaker Select"
+      },
+      "matte_type": {
+        "name": "Matte Type"
+      },
+      "matte_color": {
+        "name": "Matte Color"
+      },
+      "motion_sensitivity": {
+        "name": "Motion Sensitivity"
+      },
+      "motion_timer": {
+        "name": "Motion Timer"
+      },
+      "brightness_sensor": {
+        "name": "Brightness Sensor"
+      },
+      "picture_mode": {
+        "name": "Picture Mode"
+      }
+    },
+    "switch": {
+      "art_mode": {
+        "name": "Art Mode"
+      },
+      "power": {
+        "name": "Power"
+      }
+    },
+    "sensor": {
+      "art_metadata": {
+        "name": "Art Metadata"
+      },
+      "brightness_intensity": {
+        "name": "Brightness Intensity"
+      }
     }
   }
 }

@@ -1579,7 +1579,7 @@ class FrameArtMetadataSensor(SensorEntity):
         self._device_name = device_name
         self._device_unique_id = device_unique_id
         self._attr_unique_id = f"{entry.entry_id}_art_metadata"
-        self._attr_name = "Art Metadata"
+        self._attr_translation_key = "art_metadata"
         self._attr_native_value: str | None = None
         self._attr_extra_state_attributes: dict[str, Any] = {}
         self._frame_art_entity_id: str | None = None
@@ -2199,7 +2199,10 @@ class SmartThingsIlluminanceSensor(SensorEntity):
     _attr_native_unit_of_measurement = LIGHT_LUX
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_has_entity_name = True
-    _attr_translation_key = "illuminance"
+    # No translation key on purpose: SensorDeviceClass.ILLUMINANCE already names
+    # this entity, in every language Home Assistant ships, and core's wording
+    # stays consistent with every other integration. The key that used to be
+    # here resolved to nothing in any language and changed no displayed name.
 
     def __init__(
         self,

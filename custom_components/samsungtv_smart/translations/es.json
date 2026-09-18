@@ -197,6 +197,74 @@
       "reboot": {
         "name": "Reiniciar el televisor"
       }
+    },
+    "number": {
+      "backlight": {
+        "name": "Retroiluminación"
+      },
+      "contrast": {
+        "name": "Contraste"
+      },
+      "brightness": {
+        "name": "Brillo"
+      },
+      "sharpness": {
+        "name": "Nitidez"
+      },
+      "color": {
+        "name": "Color"
+      },
+      "tint": {
+        "name": "Tinte"
+      },
+      "art_brightness": {
+        "name": "Brillo del Modo Arte"
+      },
+      "art_color_temperature": {
+        "name": "Temperatura de color del Modo Arte"
+      }
+    },
+    "select": {
+      "color_tone": {
+        "name": "Tono de color"
+      },
+      "speaker_select": {
+        "name": "Salida de audio"
+      },
+      "matte_type": {
+        "name": "Tipo de paspartú"
+      },
+      "matte_color": {
+        "name": "Color del paspartú"
+      },
+      "motion_sensitivity": {
+        "name": "Sensibilidad de movimiento"
+      },
+      "motion_timer": {
+        "name": "Temporizador de movimiento"
+      },
+      "brightness_sensor": {
+        "name": "Sensor de brillo"
+      },
+      "picture_mode": {
+        "name": "Modo de imagen"
+      }
+    },
+    "switch": {
+      "art_mode": {
+        "name": "Modo Arte"
+      },
+      "power": {
+        "name": "Encendido"
+      }
+    },
+    "sensor": {
+      "art_metadata": {
+        "name": "Metadatos de la obra"
+      },
+      "brightness_intensity": {
+        "name": "Intensidad de brillo"
+      }
     }
   }
 }

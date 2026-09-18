@@ -218,7 +218,7 @@ class SamsungTVIPControlBacklightNumber(NumberEntity):
         self._ip_control: SamsungIPControl | None = None
         self._ip_control_token: str | None = None
         self._attr_unique_id = f"{device_unique_id}_ip_control_backlight"
-        self._attr_name = "Backlight"
+        self._attr_translation_key = "backlight"
         self._attr_native_value: float | None = None
         self._attr_available = False
 
@@ -536,7 +536,7 @@ class SamsungTVIPControlPictureNumber(CoordinatorEntity, NumberEntity):
         self._device_unique_id = device_unique_id
         self._setting = setting
         self._attr_unique_id = f"{device_unique_id}_ip_control_{setting.key}"
-        self._attr_name = setting.name
+        self._attr_translation_key = setting.key
         self._attr_icon = setting.icon
         self._attr_native_min_value = setting.min_value
         self._attr_native_max_value = setting.max_value
@@ -782,7 +782,7 @@ class SamsungTVArtBrightnessNumber(SamsungTVArtNumberBase):
     def __init__(self, hass, entry, art_api, device_name, device_unique_id):
         super().__init__(hass, entry, art_api, device_name, device_unique_id)
         self._attr_unique_id = f"{device_unique_id}_art_brightness"
-        self._attr_name = "Art Mode Brightness"
+        self._attr_translation_key = "art_brightness"
 
     async def async_set_native_value(self, value: float) -> None:
         """Set brightness on the TV.
@@ -838,7 +838,7 @@ class SamsungTVArtColorTemperatureNumber(SamsungTVArtNumberBase):
     def __init__(self, hass, entry, art_api, device_name, device_unique_id):
         super().__init__(hass, entry, art_api, device_name, device_unique_id)
         self._attr_unique_id = f"{device_unique_id}_art_color_temperature"
-        self._attr_name = "Art Mode Color Temperature"
+        self._attr_translation_key = "art_color_temperature"
 
     async def async_set_native_value(self, value: float) -> None:
         """Set color temperature on the TV (-5 to +5)."""
