@@ -2330,11 +2330,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         try:
             async with async_timeout.timeout(ST_UPDATE_TIMEOUT):
                 await self._st.async_device_update(self._use_channel_info)
-        except (
-            asyncio.TimeoutError,
-            ClientConnectionError,
-            ClientResponseError,
-        ) as exc:
+        except (TimeoutError, ClientConnectionError, ClientResponseError) as exc:
             self._log.debug("%s - SmartThings error: [%s]", self.entity_id, exc)
             self._st_last_exc = exc
             return False
@@ -4536,7 +4532,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             )
             return False
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.error("Frame Art: Timeout checking/activating Art Mode")
             return False
         except Exception as ex:

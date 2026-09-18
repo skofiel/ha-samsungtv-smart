@@ -131,7 +131,7 @@ async def async_setup_entry(
         try:
             async with asyncio.timeout(5):
                 is_supported = await art_api.supported()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug("Timeout checking Frame TV support for %s", host)
             is_supported = False
         except Exception as ex:
@@ -618,7 +618,7 @@ class FrameArtModeSwitch(SwitchEntity):
                 self._log.warning("Art Mode for %s: %s", self._device_name, ex)
                 self.async_write_ha_state()
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.debug("Timeout on attempt %d/%d", attempt + 1, max_retries)
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
@@ -699,7 +699,7 @@ class FrameArtModeSwitch(SwitchEntity):
                 self._log.warning("Art Mode for %s: %s", self._device_name, ex)
                 self.async_write_ha_state()
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.debug("Timeout on attempt %d/%d", attempt + 1, max_retries)
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
@@ -799,7 +799,7 @@ class FrameArtModeSwitch(SwitchEntity):
                         )
                     else:
                         self._log.debug("Could not get Art Mode state")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.debug("Timeout updating Art Mode state")
             # Don't mark as unavailable on timeout - TV might be off
         except Exception as ex:

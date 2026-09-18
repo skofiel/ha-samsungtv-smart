@@ -278,7 +278,7 @@ async def _load_matte_options(
             await color_select.async_refresh_current()
             return
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug(
                 "Timeout fetching matte list (attempt %d/%d), retrying in %ds",
                 attempt + 1,
@@ -315,7 +315,7 @@ async def _load_picture_mode_options(
                 )
                 return
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug(
                 "Timeout fetching picture modes (attempt %d/%d), retrying in %ds",
                 attempt + 1,
@@ -462,7 +462,7 @@ async def _load_motion_options(
                 )
             return
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug(
                 "Timeout fetching motion settings (attempt %d/%d), retrying in %ds",
                 attempt + 1,

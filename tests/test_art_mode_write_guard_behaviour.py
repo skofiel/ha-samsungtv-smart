@@ -12,7 +12,6 @@ nested `except Exception` for a *read* inside the same method broke it while the
 behaviour was untouched.
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -74,7 +73,7 @@ async def test_a_suppressed_write_says_so_once(action):
 async def test_an_ordinary_failure_still_retries(action):
     """The suppression is special; a transient error is not."""
     switch = _switch()
-    switch._set_artmode = AsyncMock(side_effect=asyncio.TimeoutError())
+    switch._set_artmode = AsyncMock(side_effect=TimeoutError())
 
     with patch("asyncio.sleep", new=AsyncMock()):
         await getattr(switch, action)()

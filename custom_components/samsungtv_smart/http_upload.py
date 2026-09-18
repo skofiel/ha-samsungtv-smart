@@ -10,6 +10,7 @@ temp file → call the service → return the content_id.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import tempfile
@@ -109,7 +110,5 @@ def _write_temp_file(data: bytes, suffix: str) -> str:
 
 def _remove_file(path: str) -> None:
     """Best-effort temp file cleanup (executor)."""
-    try:
+    with contextlib.suppress(OSError):
         os.remove(path)
-    except OSError:
-        pass

@@ -933,7 +933,7 @@ async def get_device_info(hostname: str, session: ClientSession) -> dict:
             tv_url(host=hostname), raise_for_status=True
         ) as resp:
             info = await resp.json()
-    except (asyncio.TimeoutError, ClientConnectionError):
+    except (TimeoutError, ClientConnectionError):
         _LOGGER.warning("Error getting HTTP device info for TV: %s", hostname)
         return {}
 

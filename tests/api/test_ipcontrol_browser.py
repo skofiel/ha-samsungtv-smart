@@ -59,7 +59,7 @@ class BrowserControlTest(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_open_browser_emits_expected_payload(self):
-        """directAccessControl sends the expected browser launch payload."""
+        """DirectAccessControl sends the expected browser launch payload."""
         client = self._client()
         sent = {}
 

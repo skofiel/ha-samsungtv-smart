@@ -596,7 +596,7 @@ class SamsungTVAsyncArt:
                         aiohttp.WSMsgType.ERROR,
                     ):
                         break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
 
             if not connected:
@@ -920,7 +920,7 @@ class SamsungTVAsyncArt:
             self._timeout_streak = 0
             self._got_response_since_connect = True
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.debug("Art API: Timeout waiting for '%s'", request_key)
             self._note_request_timeout()
             return None
@@ -1318,7 +1318,7 @@ class SamsungTVAsyncArt:
                 await writer.wait_closed()
                 self._log.debug("Art API: Thumbnail socket closed")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.debug("Art API: Timeout connecting to thumbnail socket")
             return {}
         except asyncio.IncompleteReadError as ex:
@@ -1464,7 +1464,7 @@ class SamsungTVAsyncArt:
                 writer.close()
                 await writer.wait_closed()
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._log.debug("Art API: Timeout getting thumbnail")
             return None
         except Exception as ex:
@@ -2061,7 +2061,7 @@ class SamsungTVAsyncArt:
         try:
             async with asyncio.timeout(timeout):
                 slideshow_ok = _is_usable(await self.get_slideshow_status())
-        except (asyncio.TimeoutError, Exception) as ex:  # noqa: BLE001
+        except (TimeoutError, Exception) as ex:  # noqa: BLE001
             self._log.debug(
                 "Art API: detect_slideshow_api: get_slideshow_status probe failed: %s",
                 ex,
@@ -2071,7 +2071,7 @@ class SamsungTVAsyncArt:
         try:
             async with asyncio.timeout(timeout):
                 auto_rotation_ok = _is_usable(await self.get_auto_rotation_status())
-        except (asyncio.TimeoutError, Exception) as ex:  # noqa: BLE001
+        except (TimeoutError, Exception) as ex:  # noqa: BLE001
             self._log.debug(
                 "Art API: detect_slideshow_api: get_auto_rotation_status probe failed: %s",
                 ex,
@@ -2263,7 +2263,7 @@ class SamsungTVAsyncArt:
                     timeout=10,
                 )
                 self._log.debug("Art API: Connected for upload")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.error("Art API: Timeout connecting for upload")
                 return None
             except Exception as ex:

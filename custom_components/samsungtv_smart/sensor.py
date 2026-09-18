@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
@@ -328,7 +329,7 @@ async def async_setup_entry(  # noqa: C901
         try:
             async with asyncio.timeout(5):
                 is_supported = await art_api.supported()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug("Timeout checking Frame TV support for %s", host)
             is_supported = False
         except Exception as ex:
@@ -740,7 +741,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                         art_mode = await self._art_api.get_artmode()
                         data["art_mode"] = art_mode
                         self._log.debug("Frame Art: Direct API art_mode: %s", art_mode)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     self._log.debug("Timeout getting art mode status")
                 except Exception as ex:
                     self._log.debug("Error getting art mode: %s", ex)
@@ -771,7 +772,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                                     raw_content_id,
                                 )
                             content_id = None
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.debug("Timeout getting current artwork")
             except Exception as ex:
                 self._log.debug("Error getting current artwork: %s", ex)
@@ -869,7 +870,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                     async with asyncio.timeout(15):
                         artwork_list = await self._art_api.available()
                         data["artwork_count"] = len(artwork_list) if artwork_list else 0
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     self._log.debug("Timeout getting artwork list")
                 except Exception as ex:
                     self._log.debug("Error getting artwork list: %s", ex)
@@ -904,7 +905,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                             "Frame Art: slideshow API detection inconclusive "
                             "(neither endpoint responded); will retry next cycle"
                         )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     self._log.debug("Frame Art: timeout during slideshow API detection")
                 except Exception as ex:  # noqa: BLE001
                     self._log.debug(
@@ -920,7 +921,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                         slideshow = await self._art_api.get_slideshow_status()
                     if slideshow:
                         data["slideshow_status"] = slideshow.get("value", "off")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.debug("Timeout getting slideshow status")
             except Exception as ex:
                 self._log.debug("Error getting slideshow status: %s", ex)
@@ -1271,10 +1272,8 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                 # Clean up legacy DRM marker from previous versions
                 legacy_marker = os.path.join(www_path, "current_drm.txt")
                 if os.path.exists(legacy_marker):
-                    try:
+                    with contextlib.suppress(OSError):
                         os.remove(legacy_marker)
-                    except OSError:
-                        pass
 
                 return file_path
 
@@ -1358,7 +1357,7 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                         last_error,
                     )
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 last_error = "timeout (15s)"
                 self._log.debug(
                     "Frame Art: Timeout on attempt %d/%d for %s",
@@ -1389,10 +1388,8 @@ class FrameArtCoordinator(DataUpdateCoordinator):
                 for marker_name in ("current_error.txt", "current_drm.txt"):
                     marker_path = os.path.join(www_path, marker_name)
                     if os.path.exists(marker_path):
-                        try:
+                        with contextlib.suppress(OSError):
                             os.remove(marker_path)
-                        except OSError:
-                            pass
 
                 # Save as current.jpg
                 file_path = os.path.join(www_path, "current.jpg")
@@ -1523,10 +1520,8 @@ class FrameArtCoordinator(DataUpdateCoordinator):
             for marker_name in ("current_error.txt", "current_drm.txt"):
                 marker_path = os.path.join(www_path, marker_name)
                 if os.path.exists(marker_path):
-                    try:
+                    with contextlib.suppress(OSError):
                         os.remove(marker_path)
-                    except OSError:
-                        pass
             return True
 
         try:
@@ -1811,10 +1806,8 @@ class FrameArtFolderSensor(SensorEntity):
                 if fname.lower().endswith(".jpg"):
                     fpath = os.path.join(www_path, fname)
                     files.append(fpath)
-                    try:
+                    with contextlib.suppress(OSError):
                         total += os.path.getsize(fpath)
-                    except OSError:
-                        pass
             return files, total
 
         self._files, self._total_bytes = await self.hass.async_add_executor_job(_scan)

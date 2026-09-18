@@ -8,6 +8,7 @@ cached JPEG instead, so only kilobytes per tile travel to the browser.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import os
@@ -152,10 +153,8 @@ class SamsungTVThumbnailView(HomeAssistantView):
         finally:
             # A failed encode used to leave the temp file behind for good.
             if os.path.exists(tmp_file):
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(tmp_file)
-                except OSError:
-                    pass
 
         _prune_cache(self._cache_dir)
 

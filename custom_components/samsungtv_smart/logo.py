@@ -1,7 +1,6 @@
 """Logo implementation for SamsungTV Smart."""
 
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 import json
 import logging
@@ -152,7 +151,7 @@ class Logo:
         if self._media_image_base_url is None:
             return False
 
-        check_time = datetime.now(timezone.utc)
+        check_time = datetime.now(UTC)
         if self._last_check is not None and self._last_check > check_time - timedelta(
             days=LOGO_FILE_DAYS_BEFORE_UPDATE
         ):
@@ -165,12 +164,12 @@ class Logo:
         if not self.check_requested():
             return
 
-        check_time = datetime.now(timezone.utc)
+        check_time = datetime.now(UTC)
         update_file = not await aiopath.path.isfile(self._logo_file_download_path)
         if not update_file:
             file_date = datetime.fromtimestamp(
                 await aiopath.path.getmtime(self._logo_file_download_path),
-                timezone.utc,
+                UTC,
             )
             if file_date > check_time - timedelta(days=LOGO_FILE_DAYS_BEFORE_UPDATE):
                 self._last_check = file_date
@@ -183,9 +182,9 @@ class Logo:
                     url_date = datetime.strptime(
                         response.headers.get("Last-Modified"),
                         "%a, %d %b %Y %X %Z",
-                    ).replace(tzinfo=timezone.utc)
+                    ).replace(tzinfo=UTC)
                     update_file = url_date > file_date
-            except (aiohttp.ClientError, asyncio.TimeoutError):
+            except (TimeoutError, aiohttp.ClientError):
                 _LOGGER.warning(
                     "Not able to check for latest paths file for logos from %s%s. "
                     "Check if the URL is accessible from this machine",
@@ -211,7 +210,7 @@ class Logo:
 
             return True
 
-        except (aiohttp.ClientError, asyncio.TimeoutError):
+        except (TimeoutError, aiohttp.ClientError):
             _LOGGER.warning(
                 "Not able to download latest paths file for logos from %s%s. "
                 "Check if the URL is accessible from this machine.",

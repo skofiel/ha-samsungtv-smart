@@ -77,6 +77,7 @@ def make_device(
         options: config entry options.
         coordinator: the shared getTVStates coordinator. Pass one to exercise
             the real _ip_control_panel_art_cached instead of the panel_art stub.
+
     """
     device = object.__new__(SamsungTVDevice)
 

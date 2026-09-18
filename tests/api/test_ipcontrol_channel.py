@@ -59,7 +59,7 @@ class ChannelControlTest(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_get_channel_emits_expected_payload_and_returns_state(self):
-        """directChannelControl returns tuner metadata unchanged."""
+        """DirectChannelControl returns tuner metadata unchanged."""
         client = self._client()
         sent = {}
 
