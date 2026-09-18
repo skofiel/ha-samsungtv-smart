@@ -1999,6 +1999,21 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         getTVStates, not the wedge-prone artModeControl flag.
         """
         coordinator = self._get_ip_control_state_coordinator()
+        # A DataUpdateCoordinator keeps serving its last successful payload
+        # after a failed refresh, so a TV that stopped answering would go on
+        # reporting whatever pictureMode it held when it was last reachable, for
+        # as long as it stayed unreachable — the same freeze this read exists to
+        # prevent, one layer down. A failed last poll means "not readable", and
+        # the caller falls through to the independent power sources.
+        #
+        # _get_ip_control_input_source and _get_ip_control_channel read the same
+        # snapshot and go stale the same way. They are deliberately left alone:
+        # blanking the source or the channel number the moment a poll fails is a
+        # different trade-off from the one being made here (falling through to
+        # another art signal), and belongs with a change that can be judged on
+        # its own.
+        if not getattr(coordinator, "last_update_success", True):
+            return None
         data = getattr(coordinator, "data", None)
         if not isinstance(data, dict) or data.get("powered_off"):
             return None
@@ -2861,7 +2876,17 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         art_api = (
             self.hass.data.get(DOMAIN, {}).get(self._entry_id, {}).get(DATA_ART_API)
         )
-        if art_api is not None and art_api.art_mode is not None:
+        # Only while the art channel is actually open. art_mode is pushed by
+        # art_mode_changed / go_to_standby broadcasts on that socket, so once it
+        # closes the value stops being maintained and simply keeps whatever it
+        # last held — the mechanism behind art_mode_status freezing for hours
+        # (#248). Falling through to the independent power sources, or to None,
+        # beats reporting a value that nothing is updating.
+        if (
+            art_api is not None
+            and art_api.art_mode is not None
+            and art_api.is_connected
+        ):
             if not art_api.art_mode and self._smartthings_reports_art():
                 return True
             return art_api.art_mode

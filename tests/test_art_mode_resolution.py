@@ -12,6 +12,8 @@ precedence between them: a change that reorders the cascade has to state which
 of these it is deliberately changing.
 """
 
+from types import SimpleNamespace
+
 from tests.helpers import ArtModeStatus, MediaPlayerState, STStatus, make_device
 
 # --------------------------------------------------------------------------
@@ -184,3 +186,104 @@ def test_no_source_at_all_is_unknown_not_false():
     device = make_device(state=MediaPlayerState.ON)
 
     assert device._art_mode_is_on() is None
+
+
+# --------------------------------------------------------------------------
+# The art channel must be live for its cached value to mean anything
+# --------------------------------------------------------------------------
+
+
+def test_a_closed_art_channel_does_not_get_to_report_art_mode():
+    """art_mode is push-only: a closed socket means nothing is updating it.
+
+    This is the #248 freeze. _receive_loop clears the cache when it exits
+    normally, but the bounded force-close and a send failure both drop the
+    connection without going through it, and the last value — typically "on",
+    since Art Mode is a Frame's last state before power-off — kept being
+    reported for as long as the socket stayed down.
+    """
+    device = make_device(art_api_art_mode=True, art_connected=False)
+
+    assert device._art_mode_is_on() is None
+
+
+def test_a_closed_art_channel_falls_through_to_the_power_sources():
+    device = make_device(
+        art_api_art_mode=True,
+        art_connected=False,
+        st_state=STStatus.STATE_OFF,
+    )
+
+    assert device._art_mode_is_on() is False
+
+
+def test_a_closed_art_channel_still_lets_smartthings_report_art():
+    device = make_device(
+        art_api_art_mode=False,
+        art_connected=False,
+        st_state=STStatus.STATE_ON,
+        st_channel_name="art",
+    )
+
+    assert device._art_mode_is_on() is True
+
+
+# --------------------------------------------------------------------------
+# The panel snapshot reader itself
+# --------------------------------------------------------------------------
+
+
+def _coordinator(picture_mode=None, *, powered_off=False, success=True):
+    """A stand-in for the shared getTVStates DataUpdateCoordinator."""
+    return SimpleNamespace(
+        data={"powered_off": powered_off, "tv": {"pictureMode": picture_mode}},
+        last_update_success=success,
+    )
+
+
+def test_ambient_is_the_only_picture_mode_that_means_art():
+    device = make_device(coordinator=_coordinator("Ambient"))
+
+    assert device._ip_control_panel_art_cached() is True
+
+
+def test_any_other_picture_mode_means_a_real_input():
+    device = make_device(coordinator=_coordinator("Standard"))
+
+    assert device._ip_control_panel_art_cached() is False
+
+
+def test_a_stale_snapshot_is_unreadable_not_false():
+    """The coordinator keeps serving its last good payload after a failure.
+
+    Without this a TV that stopped answering went on reporting the pictureMode
+    it held when last reachable, for as long as it stayed unreachable.
+    """
+    device = make_device(coordinator=_coordinator("Ambient", success=False))
+
+    assert device._ip_control_panel_art_cached() is None
+
+
+def test_a_powered_off_panel_is_unreadable():
+    device = make_device(coordinator=_coordinator("Ambient", powered_off=True))
+
+    assert device._ip_control_panel_art_cached() is None
+
+
+def test_no_coordinator_at_all_is_unreadable():
+    device = make_device(coordinator=None)
+
+    assert device._ip_control_panel_art_cached() is None
+
+
+def test_a_snapshot_without_a_picture_mode_is_unreadable():
+    device = make_device(coordinator=_coordinator(None))
+
+    assert device._ip_control_panel_art_cached() is None
+
+
+def test_the_boolean_helper_only_says_yes_for_a_definite_yes():
+    """None (unreadable) must not read as ambient."""
+    device = make_device(coordinator=_coordinator("Ambient", success=False))
+
+    assert device._ip_control_ambient_mode_active() is False

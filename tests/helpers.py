@@ -47,8 +47,10 @@ def make_device(
     st_state: object = UNSET,
     st_channel_name: str | None = None,
     art_api_art_mode: object = UNSET,
+    art_connected: bool = True,
     ws_artmode: ArtModeStatus = ArtModeStatus.Unsupported,
     options: dict | None = None,
+    coordinator: object = UNSET,
 ) -> SamsungTVDevice:
     """Build a SamsungTVDevice whose state inputs are exactly as described.
 
@@ -67,9 +69,14 @@ def make_device(
         st_channel_name: SmartThings' running-app name ('art' while showing art).
         art_api_art_mode: the async Art API's cached flag; UNSET means the API
             is not registered in hass.data.
+        art_connected: whether that API's WebSocket is live. Its art_mode is
+            only maintained while it is, so a False here is a cached value that
+            nothing is updating.
         ws_artmode: the legacy WebSocket art thread's status. Pinned at
             ``Unsupported`` in real installs — see disable_art_thread().
         options: config entry options.
+        coordinator: the shared getTVStates coordinator. Pass one to exercise
+            the real _ip_control_panel_art_cached instead of the panel_art stub.
     """
     device = object.__new__(SamsungTVDevice)
 
@@ -109,6 +116,7 @@ def make_device(
     if art_api_art_mode is not UNSET:
         art_api = MagicMock()
         art_api.art_mode = art_api_art_mode
+        art_api.is_connected = art_connected
     device.hass.data = {DOMAIN: {ENTRY_ID: {DATA_ART_API: art_api} if art_api else {}}}
 
     if st_state is UNSET:
@@ -118,9 +126,13 @@ def make_device(
         device._st.state = st_state
         device._st.channel_name = st_channel_name
 
-    # Cached-only read of the shared getTVStates snapshot; the coordinator it
-    # normally goes through is not worth reconstructing for a unit test.
-    device._ip_control_panel_art_cached = MagicMock(return_value=panel_art)
+    # Cached-only read of the shared getTVStates snapshot. Most tests only care
+    # what the panel says, so the read is stubbed; pass `coordinator` to drive
+    # the real one.
+    if coordinator is UNSET:
+        device._ip_control_panel_art_cached = MagicMock(return_value=panel_art)
+    else:
+        device._get_ip_control_state_coordinator = MagicMock(return_value=coordinator)
 
     device._get_ip_control_client = MagicMock(return_value=None)
     device._async_switch_entity = AsyncMock()

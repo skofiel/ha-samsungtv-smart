@@ -372,6 +372,27 @@ class SamsungTVAsyncArt:
                 self._log.debug("Art API: art-content callback raised", exc_info=True)
 
     @property
+    def is_connected(self) -> bool:
+        """Whether the art channel is live, and so whether art_mode is current.
+
+        ``art_mode`` is maintained by ``art_mode_changed`` / ``go_to_standby``
+        broadcasts arriving on this socket, and by nothing else. When the socket
+        is gone, the attribute keeps whatever it last held with nothing to
+        update it — which is how ``art_mode_status`` could sit frozen at a
+        pre-transition value for hours (#248 measured four stretches of 7-10 h
+        with artwork on screen and the attribute stuck at "off").
+
+        ``_receive_loop`` clears the cached value when it exits normally, but
+        that is only one of the ways this channel dies: the bounded force-close
+        of a transport that ignored ``close()``, and a send failure marking the
+        channel dead, both drop the connection without going through it. Rather
+        than invalidate from each of those paths — and from whichever is added
+        next — callers gate on this, which is true only while a socket is
+        actually open.
+        """
+        return self._connected and self._ws is not None and not self._ws.closed
+
+    @property
     def _ws_url(self) -> str:
         """Get the WebSocket URL for the art API.
 
