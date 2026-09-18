@@ -1,5 +1,9 @@
 """A malformed UPnP reply must not fail the whole entity update.
 
+Note the module path: media_player imports ``.api.upnp``. An identical,
+unimported copy of this module also sat at the package root; it has been
+removed, because hardening it instead of this one changed nothing at all.
+
 async_get_volume / async_get_mute parsed the SOAP body with no guard, so a
 malformed or non-UTF-8 reply raised out of them, up through
 _update_volume_info and _async_update, and failed the entity's update cycle —
@@ -9,7 +13,7 @@ read", so that is what an unparseable body now produces.
 
 from unittest.mock import AsyncMock
 
-from custom_components.samsungtv_smart.upnp import (
+from custom_components.samsungtv_smart.api.upnp import (
     MAX_RESPONSE_BYTES,
     SamsungUPnP,
     _first_tag_text,
