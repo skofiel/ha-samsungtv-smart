@@ -2220,6 +2220,7 @@ class SmartThingsIlluminanceSensor(SensorEntity):
         self._attr_unique_id = f"{device_id}_illuminance"
         self._attr_native_value = None
         self._st_last_poll = 0.0
+        self._reported_at: str | None = None
 
     async def _get_st_client(self):
         """Get SmartThings client with current token from config entry."""
@@ -2252,6 +2253,11 @@ class SmartThingsIlluminanceSensor(SensorEntity):
             model="Frame TV Light Sensor",
         )
 
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose when SmartThings says the TV last reported this reading."""
+        return {"reported_at": self._reported_at}
+
     async def async_update(self) -> None:
         """Update the sensor value from SmartThings."""
         # Local WS is primary: skip while the TV is off and throttle to the
@@ -2275,10 +2281,21 @@ class SmartThingsIlluminanceSensor(SensorEntity):
                     Capability.ILLUMINANCE_MEASUREMENT
                 ][Attribute.ILLUMINANCE]
                 self._attr_native_value = illuminance_status.value
+                # SmartThings stamps every attribute with when the device last
+                # reported it. This sensor is a pass-through, so a value that
+                # never moves is either a room whose light never changes or a
+                # reading frozen at the source — and the timestamp is what tells
+                # those apart. Surfaced as an attribute so it can be read off
+                # the entity instead of dug out of a diagnostics download.
+                reported_at = getattr(illuminance_status, "timestamp", None)
+                self._reported_at = (
+                    reported_at.isoformat() if reported_at is not None else None
+                )
                 _LOGGER.debug(
-                    "Updated illuminance sensor for %s: %s lux",
+                    "Updated illuminance sensor for %s: %s lux (reported %s)",
                     self._device_name,
                     self._attr_native_value,
+                    self._reported_at or "at an unknown time",
                 )
             else:
                 _LOGGER.debug(
@@ -2346,6 +2363,11 @@ class SmartThingsBrightnessIntensitySensor(SensorEntity):
             model="Frame TV Light Sensor",
         )
 
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose when SmartThings says the TV last reported this reading."""
+        return {"reported_at": self._reported_at}
+
     async def async_update(self) -> None:
         """Update the sensor value from SmartThings."""
         # Local WS is primary: skip while the TV is off and throttle to the
@@ -2407,6 +2429,7 @@ class SmartThingsPowerCoordinator(DataUpdateCoordinator):
         self.device_id = device_id
         self._device_name = device_name
         self._st_last_poll = 0.0
+        self._warned_empty = False
         super().__init__(
             hass,
             _LOGGER,
@@ -2490,6 +2513,23 @@ class SmartThingsPowerCoordinator(DataUpdateCoordinator):
         # avoids depending on enum names across pysmartthings versions.
         report = main.get("powerConsumptionReport", {}).get("powerConsumption")
         value = getattr(report, "value", None)
+        if not isinstance(value, dict) or not value:
+            # The capability is advertised — the sensors only exist because it
+            # was present at setup — but the TV publishes nothing under it.
+            # Said once, at warning: five sensors reading "unknown" for ever
+            # otherwise looks like a fault in this integration, and it is not
+            # one. Not every Samsung model populates powerConsumptionReport.
+            if not self._warned_empty:
+                self._warned_empty = True
+                self.logger.warning(
+                    "%s advertises the SmartThings powerConsumptionReport "
+                    "capability but publishes no data under it (got %r). The "
+                    "power and energy sensors will stay unknown; this is the "
+                    "TV, not Home Assistant",
+                    self._device_name,
+                    value,
+                )
+            return self.data or {}
         if isinstance(value, dict):
             data = dict(value)
             if powered_off:

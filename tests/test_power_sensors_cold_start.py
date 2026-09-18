@@ -41,6 +41,7 @@ def _coordinator(hass=None):
     coordinator.device_id = "dev-1"
     coordinator._device_name = "The Frame"
     coordinator._st_last_poll = 0.0
+    coordinator._warned_empty = False
     coordinator.data = None
     coordinator.logger = MagicMock()
     return coordinator
@@ -137,3 +138,40 @@ async def test_a_failed_first_fetch_leaves_room_for_a_retry(failure):
         data = await coordinator._async_update_data()
 
     assert data == {}
+
+
+async def test_an_advertised_but_empty_capability_is_reported_once():
+    """Five sensors reading "unknown" for ever must not look like our fault.
+
+    The sensors only exist because powerConsumptionReport was present at setup,
+    so a permanently empty payload means the TV advertises the capability and
+    publishes nothing under it. Not every Samsung model populates it.
+    """
+    coordinator = _coordinator()
+    coordinator._get_st_client = AsyncMock(return_value=_client_returning(None))
+
+    with patch(
+        "custom_components.samsungtv_smart.sensor._tv_powered_off", return_value=False
+    ), patch(
+        "custom_components.samsungtv_smart.sensor._tv_in_art_mode", return_value=False
+    ):
+        assert await coordinator._async_update_data() == {}
+        assert await coordinator._async_update_data() == {}
+
+    assert coordinator.logger.warning.call_count == 1
+    message = str(coordinator.logger.warning.call_args)
+    assert "powerConsumptionReport" in message
+
+
+async def test_an_empty_dict_counts_as_no_data():
+    coordinator = _coordinator()
+    coordinator._get_st_client = AsyncMock(return_value=_client_returning({}))
+
+    with patch(
+        "custom_components.samsungtv_smart.sensor._tv_powered_off", return_value=False
+    ), patch(
+        "custom_components.samsungtv_smart.sensor._tv_in_art_mode", return_value=False
+    ):
+        assert await coordinator._async_update_data() == {}
+
+    assert coordinator.logger.warning.call_count == 1
