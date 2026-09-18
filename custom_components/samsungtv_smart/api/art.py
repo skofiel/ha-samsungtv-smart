@@ -436,8 +436,8 @@ class SamsungTVAsyncArt:
                 try:
                     if not self._ws.closed:
                         await self._ws.close()
-                except Exception:  # pylint: disable=broad-except
-                    pass
+                except Exception as ex:  # noqa: BLE001 - discarding it regardless
+                    self._log.debug("Art API: closing the stale socket failed: %s", ex)
                 self._ws = None
                 if self._recv_task and not self._recv_task.done():
                     self._recv_task.cancel()
@@ -1157,8 +1157,8 @@ class SamsungTVAsyncArt:
                         data = await resp.json()
                         device = data.get("device", {})
                         return device.get("PowerState", "off") == "on"
-        except Exception:
-            pass
+        except Exception as ex:  # noqa: BLE001 - an unreachable TV reads as off
+            self._log.debug("Art API: power probe failed for %s: %s", self._host, ex)
         return False
 
     async def is_artmode(self) -> bool:

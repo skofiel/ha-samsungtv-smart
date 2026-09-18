@@ -1926,8 +1926,10 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     name = source_name if source_name != source_id else ""
                     st_source_list[name or source_id] = input_type
 
-            except Exception:  # pylint: disable=broad-except
-                pass
+            except Exception as ex:  # noqa: BLE001 - skip this source only
+                self._log.debug(
+                    "Skipping unparseable SmartThings source %s: %s", source_id, ex
+                )
 
         if len(st_source_list) > 0:
             self._log.info(
@@ -1976,8 +1978,8 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     app_id + ST_APP_SEPARATOR + st_app_id if st_app_id else app_id
                 )
 
-            except Exception:  # pylint: disable=broad-except
-                pass
+            except Exception as ex:  # noqa: BLE001 - skip this app only
+                self._log.debug("Skipping unparseable app entry: %s", ex)
 
         if self._app_list is None:
             self._app_list = filtered_app_list

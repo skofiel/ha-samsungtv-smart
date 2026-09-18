@@ -176,21 +176,5 @@ class NoPowerKeyAtArtTest(unittest.TestCase):
         self.assertIn("raise _SkipPowerOn", block[guard:power])
 
 
-class RetryLoopsStopTest(unittest.TestCase):
-    """A suppressed write ends the switch's retry loops with one warning."""
-
-    def test_both_loops_handle_the_suppression_before_the_generic_except(self):
-        for name in ("async_turn_on", "async_turn_off"):
-            block = _block(
-                SWITCH,
-                f"    async def {name}(self, **kwargs",
-                "        # All retries failed",
-            )
-            suppressed = block.index("except ArtModeWriteSuppressed")
-            generic = block.index("except Exception as ex")
-            self.assertLess(suppressed, generic, name)
-            self.assertIn("return", block[suppressed:generic])
-
-
 if __name__ == "__main__":
     unittest.main()

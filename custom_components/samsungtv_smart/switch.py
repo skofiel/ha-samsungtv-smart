@@ -429,6 +429,7 @@ class FrameArtModeSwitch(SwitchEntity):
         """Wait for TV to be ready after turning on."""
         self._log.debug("Waiting for TV to be ready (max %ds)...", max_wait)
 
+        not_ready_reason: Exception | None = None
         for i in range(max_wait):
             await asyncio.sleep(1)
 
@@ -439,10 +440,15 @@ class FrameArtModeSwitch(SwitchEntity):
                     if is_supported:
                         self._log.debug("TV ready after %d seconds", i + 1)
                         return True
-            except Exception:
-                pass
+            except Exception as ex:  # noqa: BLE001 - the TV is simply not up yet
+                not_ready_reason = ex
 
-            self._log.debug("TV not ready yet, waiting... (%d/%d)", i + 1, max_wait)
+            self._log.debug(
+                "TV not ready yet, waiting... (%d/%d): %s",
+                i + 1,
+                max_wait,
+                not_ready_reason,
+            )
 
         self._log.warning("TV did not become ready within %d seconds", max_wait)
         return False
@@ -592,8 +598,14 @@ class FrameArtModeSwitch(SwitchEntity):
                                 self._available = True
                                 self.async_write_ha_state()
                                 return
-                        except Exception:
-                            pass
+                        except Exception as ex:  # noqa: BLE001 - retried below
+                            self._log.debug(
+                                "Art Mode verification read failed on attempt "
+                                "%d/%d: %s",
+                                attempt + 1,
+                                max_retries,
+                                ex,
+                            )
 
                         if attempt < max_retries - 1:
                             self._log.debug("Retrying in %d seconds...", retry_delay)

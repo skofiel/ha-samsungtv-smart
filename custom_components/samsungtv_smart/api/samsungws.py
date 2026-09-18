@@ -1272,8 +1272,8 @@ class SamsungTVWS:
         if self._ws_art:
             try:
                 self._ws_art.close()
-            except Exception:
-                pass
+            except Exception as ex:  # noqa: BLE001 - discarding it anyway
+                self._log.debug("Closing the legacy art channel: %s", ex)
             self._ws_art = None
 
     def _start_client(self, *, start_all=False):
@@ -1360,15 +1360,15 @@ class SamsungTVWS:
                     # Nettoyage complet de toutes les connexions
                     try:
                         connection.close()
-                    except Exception:
-                        pass
+                    except Exception as ex:  # noqa: BLE001 - discarding it anyway
+                        self._log.debug("Closing the saturated connection: %s", ex)
 
                     # Forcer l'arrêt de la connexion persistante si elle existe
                     if self._ws_remote:
                         try:
                             self._ws_remote.close()
-                        except Exception:
-                            pass
+                        except Exception as ex:  # noqa: BLE001 - discarding it anyway
+                            self._log.debug("Closing the remote channel: %s", ex)
                         self._ws_remote = None
 
                     self.connection = None
