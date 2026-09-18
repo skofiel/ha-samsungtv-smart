@@ -487,7 +487,7 @@ def _anthropic_output_schema() -> dict[str, Any]:
             "suggested_search_query": {"type": ["string", "null"]},
             "translations": {
                 "type": "object",
-                "properties": {lang: translated for lang in LANGS},
+                "properties": dict.fromkeys(LANGS, translated),
                 "required": list(LANGS),
                 "additionalProperties": False,
             },
@@ -836,7 +836,7 @@ async def async_identify(
     except (VisionError, LLMError, ClientError, TimeoutError, ValueError) as err:
         _LOGGER.warning("Artwork identification failed for %s: %s", key, err)
         return {
-            **{k: None for k in RESULT_KEYS},
+            **dict.fromkeys(RESULT_KEYS),
             "identified": False,
             "source": "error",
         }

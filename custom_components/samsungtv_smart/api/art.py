@@ -1,5 +1,4 @@
-"""
-Samsung Frame TV Art Mode API wrapper for Home Assistant.
+"""Samsung Frame TV Art Mode API wrapper for Home Assistant.
 
 Based on xchwarze/samsung-tv-ws-api art-updates branch
 https://github.com/xchwarze/samsung-tv-ws-api/tree/art-updates
@@ -2434,7 +2433,7 @@ class SamsungTVAsyncArt:
 
     # ==================== Context Manager ====================
 
-    async def __aenter__(self) -> "SamsungTVAsyncArt":
+    async def __aenter__(self) -> SamsungTVAsyncArt:
         """Async context manager entry."""
         await self.open()
         return self

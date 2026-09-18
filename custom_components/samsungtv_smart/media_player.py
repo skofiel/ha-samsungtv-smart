@@ -8,7 +8,6 @@ from datetime import timedelta
 from enum import Enum
 import logging
 import os
-from socket import error as socketError
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -1784,6 +1783,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             SKCwdZ5Hxp.swisscombluetv -> Swisscom Blue TV
             HEPsqFNie0.tvplusstandalone -> TV Plus
             org.tizen.netflix-app -> Netflix
+
         """
         import re
 
@@ -3105,7 +3105,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             try:
                 send_magic_packet(self._mac, ip_address=ip_address)
                 send_success = True
-            except socketError as exc:
+            except OSError as exc:
                 self._log.warning(
                     "Failed tentative n.%s to send WOL packet: %s",
                     i,
@@ -3783,8 +3783,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         return video_id
 
     def _cast_youtube_video(self, video_id: str, enqueue: MediaPlayerEnqueue):
-        """
-        Cast a youtube video using samsungcast library.
+        """Cast a youtube video using samsungcast library.
         This method is sync and must run in job executor.
         """
         if enqueue == MediaPlayerEnqueue.PLAY:
@@ -4336,6 +4335,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
         Returns:
             bool: True if TV is ready in Art Mode, False if failed
+
         """
         # Fast path: if the TV is already in Art Mode, there is nothing to do.
         # A Frame in Art Mode reports media_player state OFF, so we must NOT
@@ -4594,7 +4594,8 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
         def _ids(entries, key: str) -> set[str]:
             """Names from a matte list, which is dicts on some models, strings
-            on others — the same shape the matte selects handle."""
+            on others — the same shape the matte selects handle.
+            """
             out: set[str] = set()
             for entry in entries or []:
                 value = entry.get(key) if isinstance(entry, dict) else entry
@@ -5002,6 +5003,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
         Returns:
             List of removed file paths
+
         """
         removed_files = []
 

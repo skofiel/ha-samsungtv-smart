@@ -1,5 +1,4 @@
-"""
-SamsungTVWS - Samsung Smart TV WS API wrapper
+"""SamsungTVWS - Samsung Smart TV WS API wrapper
 
 Copyright (C) 2019 Xchwarze
 Copyright (C) 2020 Ollo69
@@ -24,6 +23,7 @@ Copyright (C) 2020 Ollo69
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from datetime import datetime, timezone
 from enum import Enum
 import json
@@ -34,7 +34,7 @@ import subprocess
 import sys
 from threading import Lock, Thread
 import time
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlencode, urljoin
 import uuid
 
@@ -559,7 +559,7 @@ class SamsungTVWS:
         """
         if self.token_file is not None:
             try:
-                with open(self.token_file, "r", encoding="utf-8") as token_file:
+                with open(self.token_file, encoding="utf-8") as token_file:
                     return token_file.readline()
             except Exception as exc:  # pylint: disable=broad-except
                 self._log.error("Failed to read TV token file: %s", str(exc))

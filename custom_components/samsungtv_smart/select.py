@@ -237,8 +237,8 @@ async def async_setup_entry(
 async def _load_matte_options(
     hass: HomeAssistant,
     art_api: SamsungTVAsyncArt,
-    type_select: "SamsungTVMatteTypeSelect",
-    color_select: "SamsungTVMatteColorSelect",
+    type_select: SamsungTVMatteTypeSelect,
+    color_select: SamsungTVMatteColorSelect,
 ) -> None:
     """Fetch matte list from TV and populate select options, with retries."""
     for attempt in range(_MAX_RETRIES):
@@ -300,7 +300,7 @@ async def _load_matte_options(
 
 async def _load_picture_mode_options(
     hass: HomeAssistant,
-    select_entity: "SamsungTVPictureModeSelect",
+    select_entity: SamsungTVPictureModeSelect,
 ) -> None:
     """Fetch picture mode list from SmartThings, with retries."""
     for attempt in range(_MAX_RETRIES):
