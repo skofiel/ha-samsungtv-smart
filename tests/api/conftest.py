@@ -1,8 +1,8 @@
 """Scoped fixtures for the vendored Samsung Art client unit tests."""
 
+from pathlib import Path
 import sys
 import types
-from pathlib import Path
 
 import pytest
 

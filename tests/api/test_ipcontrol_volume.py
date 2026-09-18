@@ -224,9 +224,7 @@ class AbsoluteVolumeControlTest(unittest.IsolatedAsyncioTestCase):
 
         client._sync_post = fake_post
 
-        with self.assertRaises(
-            ipcontrol.SamsungIPControlUnsupportedError
-        ):
+        with self.assertRaises(ipcontrol.SamsungIPControlUnsupportedError):
             await client.async_get_volume()
 
 

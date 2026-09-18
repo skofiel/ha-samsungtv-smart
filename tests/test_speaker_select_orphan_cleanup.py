@@ -16,10 +16,7 @@ from pathlib import Path
 import unittest
 
 SELECT = (
-    Path(__file__).parents[1]
-    / "custom_components"
-    / "samsungtv_smart"
-    / "select.py"
+    Path(__file__).parents[1] / "custom_components" / "samsungtv_smart" / "select.py"
 ).read_text()
 
 
@@ -34,7 +31,7 @@ class OrphanCleanupTest(unittest.TestCase):
 
     def test_the_stale_st_speaker_select_is_looked_up_by_unique_id(self):
         self.assertIn(
-            'registry.async_get_entity_id(\n'
+            "registry.async_get_entity_id(\n"
             '            "select", DOMAIN, f"{device_unique_id}_st_media_output"\n'
             "        )",
             self.block,

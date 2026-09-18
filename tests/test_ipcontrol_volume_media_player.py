@@ -29,9 +29,7 @@ if "pysmartthings" not in sys.modules:
 from custom_components.samsungtv_smart.api.ipcontrol import (  # noqa: E402
     SamsungIPControlUnsupportedError,
 )
-from custom_components.samsungtv_smart.media_player import (  # noqa: E402
-    SamsungTVDevice,
-)
+from custom_components.samsungtv_smart.media_player import SamsungTVDevice  # noqa: E402
 
 
 def _device(*, external=True, muted=False, volume=0.20):
@@ -53,13 +51,9 @@ def _device(*, external=True, muted=False, volume=0.20):
 
     device.async_send_command = AsyncMock()
 
-    device._speaker_output_is_internal = MagicMock(
-        return_value=not external
-    )
+    device._speaker_output_is_internal = MagicMock(return_value=not external)
 
-    device._power_off_in_progress = MagicMock(
-        return_value=False
-    )
+    device._power_off_in_progress = MagicMock(return_value=False)
 
     return device
 
@@ -71,9 +65,7 @@ async def test_volume_poll_detects_direct_volume_control_support():
     client = AsyncMock()
     client.async_get_volume.return_value = 30
 
-    device._get_ip_control_client = MagicMock(
-        return_value=client
-    )
+    device._get_ip_control_client = MagicMock(return_value=client)
     device._upnp.async_get_mute.return_value = False
 
     await device._update_volume_info()
@@ -90,13 +82,11 @@ async def test_unsupported_direct_volume_control_is_probed_only_once():
     device = _device(external=True)
 
     client = AsyncMock()
-    client.async_get_volume.side_effect = (
-        SamsungIPControlUnsupportedError("Method not found")
+    client.async_get_volume.side_effect = SamsungIPControlUnsupportedError(
+        "Method not found"
     )
 
-    device._get_ip_control_client = MagicMock(
-        return_value=client
-    )
+    device._get_ip_control_client = MagicMock(return_value=client)
 
     device._upnp.async_get_volume.return_value = 20
     device._upnp.async_get_mute.return_value = False
@@ -133,9 +123,7 @@ async def test_external_unsupported_volume_hides_volume_set_feature():
 
     features = device.supported_features
 
-    assert not (
-        features & MediaPlayerEntityFeature.VOLUME_SET
-    )
+    assert not (features & MediaPlayerEntityFeature.VOLUME_SET)
 
 
 async def test_external_absolute_volume_uses_ip_control():
@@ -145,9 +133,7 @@ async def test_external_absolute_volume_uses_ip_control():
     client = AsyncMock()
     client.async_set_volume.return_value = 30
 
-    device._get_ip_control_client = MagicMock(
-        return_value=client
-    )
+    device._get_ip_control_client = MagicMock(return_value=client)
 
     await device.async_set_volume_level(0.30)
 
@@ -164,13 +150,11 @@ async def test_external_unsupported_absolute_volume_is_not_sent_to_upnp():
     device = _device(external=True, volume=0.20)
 
     client = AsyncMock()
-    client.async_set_volume.side_effect = (
-        SamsungIPControlUnsupportedError("Method not found")
+    client.async_set_volume.side_effect = SamsungIPControlUnsupportedError(
+        "Method not found"
     )
 
-    device._get_ip_control_client = MagicMock(
-        return_value=client
-    )
+    device._get_ip_control_client = MagicMock(return_value=client)
 
     await device.async_set_volume_level(0.30)
 
@@ -193,9 +177,7 @@ async def test_external_speaker_mute_uses_key_mute_toggle():
 
     await device.async_mute_volume(True)
 
-    device.async_send_command.assert_awaited_once_with(
-        "KEY_MUTE"
-    )
+    device.async_send_command.assert_awaited_once_with("KEY_MUTE")
 
     assert device._attr_is_volume_muted is True
 
@@ -203,10 +185,7 @@ async def test_external_speaker_mute_uses_key_mute_toggle():
     await device.async_mute_volume(False)
 
     assert device.async_send_command.await_count == 2
-    assert (
-        device.async_send_command.await_args_list[1].args
-        == ("KEY_MUTE",)
-    )
+    assert device.async_send_command.await_args_list[1].args == ("KEY_MUTE",)
 
     assert device._attr_is_volume_muted is False
 
@@ -223,9 +202,7 @@ async def test_internal_speaker_mute_uses_ip_control():
 
     client = AsyncMock()
 
-    device._get_ip_control_client = MagicMock(
-        return_value=client
-    )
+    device._get_ip_control_client = MagicMock(return_value=client)
 
     await device.async_mute_volume(True)
 
@@ -258,9 +235,7 @@ async def test_unsupported_volume_probe_in_ambient_mode_is_not_latched():
         30,
     ]
 
-    device._get_ip_control_client = MagicMock(
-        return_value=client
-    )
+    device._get_ip_control_client = MagicMock(return_value=client)
     device._ip_control_ambient_mode_active.return_value = True
 
     device._upnp.async_get_volume.return_value = 20
@@ -293,9 +268,7 @@ async def test_unsupported_volume_set_in_ambient_mode_is_not_latched():
         30,
     ]
 
-    device._get_ip_control_client = MagicMock(
-        return_value=client
-    )
+    device._get_ip_control_client = MagicMock(return_value=client)
     device._ip_control_ambient_mode_active.return_value = True
 
     await device.async_set_volume_level(0.30)

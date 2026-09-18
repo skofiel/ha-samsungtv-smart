@@ -49,12 +49,12 @@ def _png(color, size=(64, 64)):
 
 
 def test_dhash_matches_reencoded_same_image():
-    from custom_components.samsungtv_smart.api import _upload_sidecar as sc
-
     # Same gradient content, different size/format (mimics the TV re-encode).
     import io
 
     from PIL import Image, ImageDraw
+
+    from custom_components.samsungtv_smart.api import _upload_sidecar as sc
 
     def gradient(size):
         im = Image.new("L", size)

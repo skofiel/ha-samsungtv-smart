@@ -117,6 +117,7 @@ from .const import (
     CONF_IP_CONTROL_FW_VERSION,
     CONF_IP_CONTROL_MODEL_ID,
     CONF_IP_CONTROL_TOKEN,
+    CONF_IS_FRAME_TV,
     CONF_LOGO_OPTION,
     CONF_OAUTH_TOKEN,
     CONF_PING_PORT,
@@ -3013,12 +3014,40 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
     @property
     def support_art_mode(self) -> ArtModeSupport:
-        """Return if art mode is supported."""
+        """Return if art mode is supported.
+
+        The three sources are consulted in order of confidence, and the last
+        one is what keeps this stable while the TV is unreachable:
+
+        1. ``self._ws.artmode_status`` — only ever non-``Unsupported`` while the
+           legacy SamsungArt WebSocket thread is running. Whenever the async Art
+           API (art.py) is active — the normal case — ``disable_art_thread()``
+           stops that thread and this stays ``Unsupported`` for the life of the
+           entity. Kept for installs that still run the legacy thread.
+        2. ``device_info.FrameTVSupport`` — needs a live REST probe, so it is
+           ``None`` for any TV that is off, asleep or unreachable.
+        3. ``CONF_IS_FRAME_TV`` — persisted by the sensor/switch platforms the
+           first time the TV confirmed Frame support. Without this, a Frame that
+           is off or in Art Mode reported UNSUPPORTED, and async_turn_off then
+           skipped its SmartThings tier and fell through to a WebSocket
+           KEY_POWER that cannot power a Frame off (it only toggles Art Mode).
+           Read-only here on purpose: media_player must not *write* this flag
+           (see _ensure_frame_tv_check).
+        """
         if self._ws.artmode_status != ArtModeStatus.Unsupported:
             return ArtModeSupport.FULL
         if self._get_device_spec("FrameTVSupport") == "true":
             return ArtModeSupport.PARTIAL
+        if self._is_frame_tv_persisted():
+            return ArtModeSupport.PARTIAL
         return ArtModeSupport.UNSUPPORTED
+
+    def _is_frame_tv_persisted(self) -> bool:
+        """Return the persisted "this TV is a Frame" flag from entry.data."""
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        if entry is None:
+            return False
+        return bool(entry.data.get(CONF_IS_FRAME_TV, False))
 
     def _send_wol_packet(self, wol_repeat=None):
         """Send a WOL packet to turn on the TV."""
@@ -3147,21 +3176,73 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         elif self.support_art_mode == ArtModeSupport.FULL:
             await self._async_turn_on(True)
 
-    def _turn_off(self):
-        """Turn off media player."""
+    def _note_power_off_sent(self) -> None:
+        """Record that a power-off command is in flight.
+
+        Makes the ``state`` property report OFF for POWER_OFF_DELAY seconds so
+        the UI reacts immediately instead of waiting for the TV to drop off the
+        network, and stops the WS layer treating the disconnect as a fault.
+        """
+        self._ws.set_power_off_request()
+        self._end_of_power_off = dt_util.utcnow() + timedelta(seconds=POWER_OFF_DELAY)
+
+    async def _async_ip_control_power_off(self) -> bool:
+        """Power the TV off over IP Control. True when the command landed.
+
+        ``powerControl {"power": "powerOff"}`` is the local equivalent of the
+        SmartThings ``switch/off``: it powers the set down from normal viewing
+        *and* from Art Mode, which the WebSocket power key cannot do on a Frame.
+
+        Never raises — a failure returns False so the caller falls through to
+        the next channel.
+        """
+        client = self._get_ip_control_client()
+        if client is None:
+            return False
+
+        try:
+            await client.async_power_off()
+        except SamsungIPControlAuthError as ex:
+            self._log.warning(
+                "%s - IP Control rejected the token on power off (%s); re-pair "
+                "under Reconfigure -> IP Control. Trying the next channel",
+                self.entity_id,
+                ex,
+            )
+            return False
+        except SamsungIPControlError as ex:
+            self._log.warning(
+                "%s - IP Control power off failed (%s); trying the next channel",
+                self.entity_id,
+                ex,
+            )
+            return False
+
+        self._log.debug("%s - Powered off via IP Control", self.entity_id)
+        return True
+
+    def _turn_off(self, art_mode_on: bool | None = None):
+        """Send the WebSocket power key. Runs in an executor thread.
+
+        Last-resort power-off channel — see async_turn_off for why. ``art_mode_on``
+        is resolved by the caller (in the event loop) via _art_mode_is_on(); it
+        used to be read here from ``self._ws.artmode_status``, which is pinned at
+        ``Unsupported`` for the whole life of the entity whenever the async Art
+        API is active, so this branch never fired and a TV sitting in Art Mode
+        got no command at all.
+        """
         if self._power_off_in_progress():
             return False
 
-        cmd_power_off = "KEY_POWER"
-        cmd_power_art = "KEY_POWER"
+        cmd_power = "KEY_POWER"
         self._ws.set_power_off_request()
         if self._state == MediaPlayerState.ON:
             if self.support_art_mode == ArtModeSupport.UNSUPPORTED:
-                self.send_command(cmd_power_off)
+                self.send_command(cmd_power)
             else:
-                self.send_command(f"{cmd_power_art},3000")
-        elif self._ws.artmode_status == ArtModeStatus.On:
-            self.send_command(f"{cmd_power_art},3000")
+                self.send_command(f"{cmd_power},3000")
+        elif art_mode_on:
+            self.send_command(f"{cmd_power},3000")
         else:
             return False
 
@@ -3172,25 +3253,61 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
     async def async_turn_off(self):
         """Turn the media player off.
 
-        Frame TV + SmartThings: use SmartThings REST switch/off which
-        reliably powers off regardless of current state (ON or Art Mode).
-        The WS KEY_POWER hold only toggles between ON and Art Mode on
-        Frame 2024 and never truly powers off.
-        Falls back to WS for non-Frame TVs or when SmartThings is absent.
+        Three channels are tried in order of reliability; the first that
+        succeeds wins.
+
+        1. **IP Control** (local JSON-RPC, port 1516). ``powerControl
+           powerOff`` powers the set down from normal viewing and from Art
+           Mode, with no cloud round-trip and no token that can silently
+           expire. Skipped when the channel is unpaired or disabled.
+        2. **SmartThings** (cloud REST ``switch/off``). Also works from Art
+           Mode, but needs the internet, the SmartThings API and a live
+           OAuth/PAT token.
+        3. **WebSocket ``KEY_POWER``**. Last resort: on a Frame a power-key
+           hold only toggles viewing <-> Art Mode and never truly powers the
+           set off, so landing here on a Frame usually leaves the TV on (in
+           Art Mode). Still the correct command for non-Frame sets.
+
+        IP Control goes first on purpose. It is the only channel that is both
+        local and able to power a Frame off, so it keeps working when the cloud
+        is unreachable or a token has lapsed — the failure mode that previously
+        dropped straight through to tier 3 with nothing logged above debug.
         """
-        if self._st and self.support_art_mode != ArtModeSupport.UNSUPPORTED:
+        art_capable = self.support_art_mode != ArtModeSupport.UNSUPPORTED
+
+        if await self._async_ip_control_power_off():
+            self._note_power_off_sent()
+            await self._async_switch_entity(False)
+            return
+
+        if self._st and art_capable:
             try:
                 await self._st.async_turn_off()
-                self._ws.set_power_off_request()
-                self._end_of_power_off = dt_util.utcnow() + timedelta(
-                    seconds=POWER_OFF_DELAY
+            except Exception as ex:  # noqa: BLE001 - fall through to the next channel
+                self._log.warning(
+                    "%s - SmartThings turn_off failed (%s); trying the WebSocket "
+                    "power key",
+                    self.entity_id,
+                    ex,
                 )
+            else:
+                self._note_power_off_sent()
                 await self._async_switch_entity(False)
                 return
-            except Exception:
-                self._log.debug("SmartThings turn_off failed, falling back to WS")
 
-        result = await self.hass.async_add_executor_job(self._turn_off)
+        if art_capable:
+            self._log.warning(
+                "%s - No reliable power-off channel available (IP Control "
+                "unpaired or failed, SmartThings absent or failed). Falling back "
+                "to a WebSocket power-key hold, which on a Frame only toggles "
+                "Art Mode and will not power the set off. Pair IP Control under "
+                "Reconfigure -> IP Control for a local power-off that works from "
+                "Art Mode",
+                self.entity_id,
+            )
+
+        art_mode_on = self._art_mode_is_on()
+        result = await self.hass.async_add_executor_job(self._turn_off, art_mode_on)
         if result:
             await self._async_switch_entity(False)
 

@@ -1,8 +1,8 @@
 """Tests for the picture mode -> remote key resolution."""
 
 import importlib.util
-import unittest
 from pathlib import Path
+import unittest
 
 # Loaded straight from its file: the module depends only on the standard
 # library, and importing it through the package would drag in aiohttp and the

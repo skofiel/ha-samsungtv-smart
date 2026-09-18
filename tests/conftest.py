@@ -15,11 +15,57 @@
 #
 # See here for more info: https://docs.pytest.org/en/latest/fixture.html (note that
 # pytest includes fixtures OOB which you can use as defined on this page)
+import sys
+from types import ModuleType
 from unittest.mock import patch
 
 import pytest
 
 pytest_plugins = "pytest_homeassistant_custom_component"
+
+
+def _install_pysmartthings_stub() -> None:
+    """Install a complete ``pysmartthings`` stub before any test module loads.
+
+    ``pysmartthings`` is supplied at runtime by Home Assistant's own SmartThings
+    integration (this integration only declares it under ``after_dependencies``),
+    so it is deliberately absent from requirements_test.txt and the component
+    modules that import it need a stand-in here.
+
+    It has to live in the root conftest, which pytest imports before collecting
+    any test module. Several test modules used to install their own stub behind
+    an ``if "pysmartthings" not in sys.modules`` guard, and three of them only
+    defined ``SmartThings``. Whichever module pytest imported first won, so
+    ``tests/api/test_smartthings_hue_sync.py`` installed the incomplete stub and
+    ``tests/test_ipcontrol_channel_coordinator.py`` then failed to import
+    ``sensor.py`` ("cannot import name 'Attribute'"), aborting collection for
+    the whole suite. One complete stub, installed first, makes the result
+    independent of collection order.
+    """
+    if "pysmartthings" in sys.modules:
+        return
+
+    module = ModuleType("pysmartthings")
+
+    class _Names:
+        """Resolve any attribute to its own name.
+
+        The integration only ever passes these through to the SmartThings REST
+        API as strings (``Capability.SWITCH`` -> ``"SWITCH"``), and deliberately
+        avoids depending on enum members that move between library versions.
+        """
+
+        def __getattr__(self, name):
+            return name
+
+    module.Attribute = _Names()
+    module.Capability = _Names()
+    module.Command = _Names()
+    module.SmartThings = object
+    sys.modules["pysmartthings"] = module
+
+
+_install_pysmartthings_stub()
 
 
 # This fixture enables loading custom integrations in all tests.

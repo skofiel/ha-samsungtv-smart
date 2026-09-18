@@ -77,7 +77,9 @@ class OrchestrationTest(unittest.TestCase):
 
     def setUp(self):
         start = MEDIA_PLAYER.index("async def _async_set_hue_sync")
-        self.block = MEDIA_PLAYER[start : MEDIA_PLAYER.index("\n    async def ", start + 1)]
+        self.block = MEDIA_PLAYER[
+            start : MEDIA_PLAYER.index("\n    async def ", start + 1)
+        ]
 
     def test_it_checks_the_session_first(self):
         self.assertIn("async_hue_sync_session_active()", self.block)

@@ -58,6 +58,7 @@ you can tune.
   - [SmartThings stops working: "Forbidden"](#smartthings-stops-working-forbidden-in-the-log)
   - [Picture mode does not change the TV at all](#picture-mode-does-not-change-the-tv-at-all)
   - [IP Control reports Art Mode "on" when it isn't](#ip-control-reports-art-mode-on-when-it-isnt)
+  - [Turning a Frame off reliably](#turning-a-frame-off-reliably)
 - [Credits](#credits)
 
 ---
@@ -439,7 +440,7 @@ The **Requires** column below says what each one needs.
 |---|---|---|---|
 | `media_player.<tv_name>` | Media Player | — | Main TV control entity |
 | `remote.<tv_name>` | Remote | — | Send remote key sequences |
-| `switch.<tv_name>_power` | Switch | — | Power the TV on/off (uses SmartThings when configured, WebSocket/WOL otherwise) |
+| `switch.<tv_name>_power` | Switch | — | Power the TV on/off (IP Control first, then SmartThings, then WebSocket/WOL — see [Turning a Frame off](#turning-a-frame-off-reliably)) |
 | `select.<tv_name>_picture_mode` | Select | SmartThings | Change picture mode (Standard, Movie, etc.) |
 | `select.<tv_name>_speaker_select` | Select | SmartThings **or** IP Control | Audio output — TV speaker, external, or Q-Symphony when a compatible soundbar is paired |
 | `select.<tv_name>_color_tone` | Select | **IP Control** | Colour tone / white balance preset |
@@ -1248,6 +1249,58 @@ This typically appears **after a TV factory reset and re-pairing** of the IP Con
 2. **Factory reset the TV.** If you need IP Control for Art Mode and the flag is wedged, the only known way to clear the stuck `artModeControl` flag on the TV side is a **factory reset of the TV** (Settings → General → Reset), followed by re-pairing. There is no remote/API command that unsticks it.
 
 Once a firmware update reports `artModeControl` correctly again, you can re-enable **Enable IP Control Art Mode** under **Reconfigure → IP Control**.
+
+### Turning a Frame off reliably
+
+A Frame has no single "off". A short press of the power key drops it into **Art Mode**, which the set itself considers powered on, and the same thing happens when an HDMI-CEC source (an Apple TV, a console) sends `<Standby>` as it powers down. So an automation that turns the TV off when a source turns off can leave the panel lit with artwork — in a bedroom, that is the difference between off and a nightlight.
+
+`media_player.turn_off` and `switch.<tv_name>_power` both try three channels, in this order, and the first that succeeds wins:
+
+| # | Channel | Works from Art Mode | Needs |
+|---|---|---|---|
+| 1 | **IP Control** `powerControl powerOff` (local JSON-RPC, port 1516) | Yes | Paired under *Reconfigure → IP Control* |
+| 2 | **SmartThings** `switch/off` (cloud REST) | Yes | Internet + a live SmartThings token |
+| 3 | **WebSocket** `KEY_POWER` hold | **No** | Nothing |
+
+Tier 3 is a genuine dead end on a Frame: a power-key hold only toggles viewing ↔ Art Mode, it cannot power the set down. If the integration reaches it, it logs a warning naming the reason — if your TV keeps ending up in Art Mode, that warning is what to look for:
+
+```
+No reliable power-off channel available (IP Control unpaired or failed,
+SmartThings absent or failed). Falling back to a WebSocket power-key hold,
+which on a Frame only toggles Art Mode and will not power the set off.
+```
+
+**So: pair IP Control.** It is the only channel that is both local and able to power a Frame off, so it keeps working when the cloud is down or a SmartThings token has lapsed. Pair it under **Reconfigure → IP Control** with the TV **on and in normal viewing (not Art Mode)**, and accept the prompt on screen. Leave *Enable IP Control Art Mode* **off** — power on/off is a separate setting and is not affected by that warning above.
+
+A CEC source can also re-enter Art Mode *after* your command lands, so it is worth confirming rather than firing once:
+
+```yaml
+automation:
+  - alias: "Turn the Frame off when the Apple TV goes off"
+    triggers:
+      - trigger: state
+        entity_id: media_player.apple_tv_bedroom
+        to: "off"
+        for: "00:00:10"          # let the CEC transition settle first
+    actions:
+      - repeat:
+          sequence:
+            - action: switch.turn_off
+              target:
+                entity_id: switch.samsung_frame_power
+            - delay: "00:00:08"
+          until:
+            - condition: or
+              conditions:
+                - condition: template
+                  value_template: >
+                    {{ state_attr('media_player.samsung_frame',
+                                  'art_mode_status') != 'on' }}
+                - condition: template
+                  value_template: "{{ repeat.index >= 3 }}"
+```
+
+> `media_player.state` deliberately reports `off` for 20 seconds after any turn-off command so the UI reacts immediately, before the TV has actually dropped off the network. Don't use it as the exit condition right after sending one — check the `art_mode_status` attribute instead, as above.
 
 ---
 

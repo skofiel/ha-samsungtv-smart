@@ -1287,12 +1287,31 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(
         entry, SAMSMART_PLATFORM
     ):
-        if art_api := hass.data[DOMAIN][entry.entry_id].pop(DATA_ART_API, None):
-            await art_api.close()
-        hass.data[DOMAIN][entry.entry_id].pop(DATA_CFG)
-        hass.data[DOMAIN][entry.entry_id].pop(DATA_OPTIONS)
-        if not hass.data[DOMAIN][entry.entry_id]:
-            hass.data[DOMAIN].pop(entry.entry_id)
+        # Every lookup here is defensive on purpose. This used to index
+        # hass.data[DOMAIN][entry.entry_id] directly and pop DATA_CFG /
+        # DATA_OPTIONS without a default, so a setup that never got as far as
+        # populating them — or a second unload — raised KeyError out of
+        # async_unload_entry. Home Assistant then leaves the entry in "failed to
+        # unload", which no reload can clear: it takes a restart.
+        entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        if entry_data is None:
+            return unload_ok
+
+        if art_api := entry_data.pop(DATA_ART_API, None):
+            try:
+                await art_api.close()
+            except Exception as ex:  # noqa: BLE001 - never block an unload
+                # A wedged art socket must not be able to pin the entry in
+                # "failed to unload"; close() already bounds its own handshake.
+                _LOGGER.warning(
+                    "Error closing the Art API for %s during unload: %s",
+                    entry.data.get(CONF_HOST, entry.entry_id),
+                    ex,
+                )
+        entry_data.pop(DATA_CFG, None)
+        entry_data.pop(DATA_OPTIONS, None)
+        if not entry_data:
+            hass.data[DOMAIN].pop(entry.entry_id, None)
 
     return unload_ok
 
