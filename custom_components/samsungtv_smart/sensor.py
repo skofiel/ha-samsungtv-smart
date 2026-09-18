@@ -436,7 +436,7 @@ async def async_setup_entry(  # noqa: C901
             # TV reports the powerConsumptionReport capability over SmartThings.
             try:
                 main_status = await st_client.get_device_status(device_id)
-                if "powerConsumptionReport" in main_status.get("main", {}):
+                if _power_report_is_metered(main_status):
                     _LOGGER.info("Adding power consumption sensors for %s", device_name)
                     # One shared coordinator = one get_device_status per cycle
                     # for all five fields (was 5× redundant calls), throttled to
@@ -461,6 +461,13 @@ async def async_setup_entry(  # noqa: C901
                     hass.async_create_background_task(
                         power_coordinator.async_request_refresh(),
                         f"st_power_initial_refresh_{entry.entry_id}",
+                    )
+                else:
+                    _LOGGER.info(
+                        "%s advertises powerConsumptionReport but does not meter "
+                        "its own consumption; the power and energy sensors are "
+                        "not created",
+                        device_name,
                     )
             except Exception as ex:
                 _LOGGER.debug("Could not check power consumption capability: %s", ex)
@@ -1555,6 +1562,32 @@ class FrameArtCoordinator(DataUpdateCoordinator):
             self.async_set_updated_data(self.data)
 
         return promoted
+
+
+# SmartThings' powerConsumptionReport dict carries a `start`/`end` window for
+# the period it covers. A set that has never metered anything publishes the
+# whole structure zeroed with `start` at the Unix epoch — the field's "never
+# initialised" value — and simply never updates it again.
+#
+# Measured on a 55" Frame (LS03D): every field 0, `start` 1970-01-01T00:00:00Z,
+# and the attribute's own timestamp a day old while the TV was otherwise
+# talking to SmartThings normally. Creating the five sensors from that gives
+# five entities that can only ever read 0 — and `energy`, carrying
+# SensorDeviceClass.ENERGY and TOTAL_INCREASING, would join Home Assistant's
+# Energy dashboard as a meter that reads nothing.
+_UNMETERED_START = "1970-01-01T00:00:00Z"
+
+
+def _power_report_is_metered(main_status: dict) -> bool:
+    """True when the TV actually meters consumption, not just advertises it."""
+    report = main_status.get("main", {}).get("powerConsumptionReport", {})
+    value = getattr(report.get("powerConsumption"), "value", None)
+    if not isinstance(value, dict) or not value:
+        return False
+    start = value.get("start")
+    # A real metering window has a real start. Anything else — the epoch, or no
+    # start at all — means the counter was never running.
+    return bool(start) and start != _UNMETERED_START
 
 
 class FrameArtMetadataSensor(SensorEntity):

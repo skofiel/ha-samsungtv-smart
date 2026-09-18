@@ -59,6 +59,7 @@ you can tune.
   - [Picture mode does not change the TV at all](#picture-mode-does-not-change-the-tv-at-all)
   - [IP Control reports Art Mode "on" when it isn't](#ip-control-reports-art-mode-on-when-it-isnt)
   - [Turning a Frame off reliably](#turning-a-frame-off-reliably)
+  - [The SmartThings cloud sensors report what the TV publishes](#the-smartthings-cloud-sensors-report-what-the-tv-publishes)
 - [Credits](#credits)
 
 ---
@@ -1301,6 +1302,47 @@ automation:
 ```
 
 > `media_player.state` deliberately reports `off` for 20 seconds after any turn-off command so the UI reacts immediately, before the TV has actually dropped off the network. Don't use it as the exit condition right after sending one — check the `art_mode_status` attribute instead, as above.
+
+### The SmartThings cloud sensors report what the TV publishes
+
+The light-level, brightness-intensity and power/energy sensors are
+pass-throughs: they show what SmartThings hands over and add nothing to it. So
+when one of them looks wrong, the question is what the cloud is actually
+publishing — and the answer is in the diagnostics download
+(**Settings → Devices & Services → SamsungTV Smart → ⋮ → Download diagnostics**),
+whose `smartthings` section lists every attribute of the TV and of each child
+device with its value, unit and the timestamp of when the device last reported
+it.
+
+**A light level that never changes is usually not a fault.** The Frame's light
+sensor is a separate SmartThings child device, and on some sets it reports only
+a handful of times a day — measured on a 55" Frame: sixteen of its attributes
+last changed a month ago, and illuminance reported exactly once that day, while
+the TV itself was updating normally. The value is real, just infrequent. The
+sensor carries a `reported_at` attribute with SmartThings' own timestamp, so
+you can see how old the current reading is:
+
+```jinja
+{{ state_attr('sensor.my_frame_light_level', 'reported_at') }}
+```
+
+If your set only reports daily, the sensor is of little use for automations —
+disable the entity in Home Assistant rather than trying to work around it. Note
+also that the value is whatever the panel's sensor returns; Samsung does not
+calibrate it against a lux reference, so treat it as a relative level.
+
+**Most Frames do not meter their own consumption.** They advertise the
+SmartThings `powerConsumptionReport` capability and publish the whole structure
+zeroed, with `start` at the Unix epoch — the "never initialised" value — and
+never update it. The five power/energy sensors are therefore only created when
+that report shows a real metering window; on a TV that does not meter, they are
+not created at all and the log says so once. Without this they existed but could
+only ever read 0, and `energy` — carrying `device_class: energy` and
+`state_class: total_increasing` — would appear in the Energy dashboard as a
+meter reading nothing.
+
+If you updated from a version that created them, the five stale entities stay in
+the registry: remove them from **Settings → Devices & Services → Entities**.
 
 ---
 
