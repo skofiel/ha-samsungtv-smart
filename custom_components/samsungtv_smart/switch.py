@@ -1171,16 +1171,42 @@ class SamsungTVPowerSwitch(SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the TV off.
 
-        Priority:
-        - SmartThings configured → Command.OFF (hardware-level, works regardless
-          of TV state including Art Mode).
-        - IP Control paired → powerOff via JSON-RPC (explicit, works from Art
-          Mode, no cloud, future-proof if Samsung disables the WebSocket ports).
-        - Otherwise → media_player.turn_off (KEY_POWER over WebSocket). Note that
-          on Frame TVs this only toggles between viewing and Art Mode rather than
-          issuing a true power-off — which is exactly why the paths above are
-          preferred when available.
+        Same order as media_player.async_turn_off, deliberately — the two used
+        to disagree, which is how a Frame could be powered off by the switch but
+        not by the media player:
+
+        1. IP Control paired → powerOff via JSON-RPC. Local, works from Art
+           Mode, no cloud round-trip and no token that can expire behind your
+           back; also future-proof if Samsung disables the WebSocket ports.
+        2. SmartThings configured → Command.OFF. Hardware-level and also works
+           from Art Mode, but depends on the cloud being reachable and the
+           token being live.
+        3. Otherwise → media_player.turn_off. On a Frame that ends at a
+           WebSocket KEY_POWER hold, which only toggles viewing <-> Art Mode
+           and cannot issue a true power-off — which is exactly why the two
+           channels above are preferred whenever they exist.
         """
+        # IP Control path — explicit local power-off, works from Art Mode.
+        ip_control = self._get_ip_control()
+        if ip_control is not None:
+            try:
+                await ip_control.async_power_off()
+                self._set_optimistic(False)
+                self._log.debug("Power switch: TV turned off via IP Control")
+                return
+            except SamsungIPControlAuthError as ex:
+                self._log.warning(
+                    "Power switch: IP Control token rejected (%s) — re-pair via "
+                    "the integration options; trying the next channel",
+                    ex,
+                )
+            except SamsungIPControlError as ex:
+                self._log.warning(
+                    "Power switch: IP Control turn_off failed (%s), "
+                    "trying the next channel",
+                    ex,
+                )
+
         if self._device_id:
             # SmartThings path — bypasses HA state entirely
             try:
@@ -1205,29 +1231,9 @@ class SamsungTVPowerSwitch(SwitchEntity):
                     ex,
                 )
 
-        # IP Control path — explicit power-off, works from Art Mode.
-        ip_control = self._get_ip_control()
-        if ip_control is not None:
-            try:
-                await ip_control.async_power_off()
-                self._set_optimistic(False)
-                self._log.debug("Power switch: TV turned off via IP Control")
-                return
-            except SamsungIPControlAuthError as ex:
-                self._log.warning(
-                    "Power switch: IP Control token rejected (%s) — re-pair via "
-                    "the integration options; falling back to WebSocket",
-                    ex,
-                )
-            except SamsungIPControlError as ex:
-                self._log.debug(
-                    "Power switch: IP Control turn_off failed (%s), "
-                    "falling back to WebSocket",
-                    ex,
-                )
-
-        # WebSocket fallback —
-        # media_player._turn_off() handles Art Mode via KEY_POWER natively
+        # Last resort: media_player.turn_off. Its own IP Control and SmartThings
+        # tiers have already been ruled out above, so on a Frame this lands on
+        # the power key and will most likely leave the set in Art Mode.
         entity_id = self._get_media_player_entity_id()
         if not entity_id:
             self._log.error(
