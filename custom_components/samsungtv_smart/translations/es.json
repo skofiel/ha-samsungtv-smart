@@ -264,6 +264,24 @@
       },
       "brightness_intensity": {
         "name": "Intensidad de brillo"
+      },
+      "illuminance": {
+        "name": "Nivel de luz"
+      },
+      "power": {
+        "name": "Potencia"
+      },
+      "energy": {
+        "name": "Energía"
+      },
+      "energy_difference": {
+        "name": "Diferencia de energía"
+      },
+      "power_energy": {
+        "name": "Energía del periodo"
+      },
+      "energy_saved": {
+        "name": "Energía ahorrada"
       }
     }
   }

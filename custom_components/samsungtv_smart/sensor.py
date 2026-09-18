@@ -2199,10 +2199,7 @@ class SmartThingsIlluminanceSensor(SensorEntity):
     _attr_native_unit_of_measurement = LIGHT_LUX
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_has_entity_name = True
-    # No translation key on purpose: SensorDeviceClass.ILLUMINANCE already names
-    # this entity, in every language Home Assistant ships, and core's wording
-    # stays consistent with every other integration. The key that used to be
-    # here resolved to nothing in any language and changed no displayed name.
+    _attr_translation_key = "illuminance"
 
     def __init__(
         self,
@@ -2254,11 +2251,6 @@ class SmartThingsIlluminanceSensor(SensorEntity):
             manufacturer="Samsung",
             model="Frame TV Light Sensor",
         )
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return "Light Level"
 
     async def async_update(self) -> None:
         """Update the sensor value from SmartThings."""
@@ -2354,11 +2346,6 @@ class SmartThingsBrightnessIntensitySensor(SensorEntity):
             model="Frame TV Light Sensor",
         )
 
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return "Brightness Intensity"
-
     async def async_update(self) -> None:
         """Update the sensor value from SmartThings."""
         # Local WS is primary: skip while the TV is off and throttle to the
@@ -2452,25 +2439,34 @@ class SmartThingsPowerCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict:
         """Fetch the powerConsumption dict once, or keep last values."""
+        powered_off = _tv_powered_off(self.hass, self._entry)
+
         # Local WS is primary: while the TV is truly off (not showing Art),
         # skip the cloud call and keep the last reported values — except the
         # instantaneous power draw, which drops to ~0 in standby (don't leave
         # the last ON wattage frozen on the sensor).
-        if _tv_powered_off(self.hass, self._entry):
+        #
+        # Not on the first refresh, though. Skipping that one left self.data
+        # empty, and nothing refilled it until the TV was switched on, so all
+        # five sensors read "unknown" indefinitely — which is what restarting
+        # Home Assistant with the TV off produced, and a TV that spends most of
+        # its life off never got a first reading at all. The cumulative
+        # counters are meaningful whatever the TV is doing, so the first fetch
+        # goes ahead regardless and only the instantaneous draw is zeroed.
+        if powered_off and self.data is not None:
             self.logger.debug(
                 "Power sensors: TV off, skipping SmartThings poll for %s",
                 self._device_name,
             )
-            data = dict(self.data or {})
+            data = dict(self.data)
             for field in self._INSTANTANEOUS_FIELDS:
-                if field in data:
-                    data[field] = 0
+                data[field] = 0
             return data
         # In Art Mode the Frame draws power but the draw barely changes, so poll
         # at a fixed slow keepalive (ST_POLL_OFF_INTERVAL) rather than the — often
         # much faster — "when on" cadence used for responsive channel/picture-mode
         # updates. This decouples the power sensor from the comfort interval.
-        if _tv_in_art_mode(self.hass, self._entry):
+        if not powered_off and _tv_in_art_mode(self.hass, self._entry):
             now = time.monotonic()
             if now - self._st_last_poll < ST_POLL_OFF_INTERVAL:
                 self.logger.debug(
@@ -2495,7 +2491,13 @@ class SmartThingsPowerCoordinator(DataUpdateCoordinator):
         report = main.get("powerConsumptionReport", {}).get("powerConsumption")
         value = getattr(report, "value", None)
         if isinstance(value, dict):
-            return value
+            data = dict(value)
+            if powered_off:
+                # First reading taken with the set in standby: the counters are
+                # real, the instantaneous draw is not.
+                for field in self._INSTANTANEOUS_FIELDS:
+                    data[field] = 0
+            return data
         return self.data or {}
 
 
@@ -2569,8 +2571,11 @@ class SmartThingsPowerConsumptionSensor(CoordinatorEntity, SensorEntity):
         # (power, energy, deltaEnergy, powerEnergy, energySaved); suffix is only
         # used for the entity's unique_id / friendly name.
         self._field = measure
-        self._friendly = friendly
         self._divisor = divisor
+        # suffix doubles as the translation key; `friendly` is only the English
+        # fallback for an install running a language file without an entry.
+        self._attr_translation_key = suffix
+        self._attr_name = friendly
         self._attr_device_class = dev_class
         self._attr_state_class = state_class
         self._attr_native_unit_of_measurement = unit
@@ -2580,11 +2585,6 @@ class SmartThingsPowerConsumptionSensor(CoordinatorEntity, SensorEntity):
     def device_info(self) -> DeviceInfo:
         """Return device info - link to the TV device."""
         return DeviceInfo(identifiers={(DOMAIN, self._parent_device_id)})
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return self._friendly
 
     @property
     def native_value(self):
