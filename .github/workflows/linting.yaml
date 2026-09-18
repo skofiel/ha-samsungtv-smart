@@ -22,11 +22,14 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+      # tests/ is linted too: a test module that does not import is a test
+      # that never runs, and the suite used to abort collection for exactly
+      # that reason without anything flagging it.
       - name: flake8
-        run: flake8 custom_components
+        run: flake8 custom_components tests
       - name: isort
-        run: isort --diff --check custom_components
+        run: isort --diff --check custom_components tests
       - name: Black
-        run: black --line-length 88 --diff --check custom_components
+        run: black --line-length 88 --diff --check custom_components tests
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

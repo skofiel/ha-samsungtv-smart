@@ -1,7 +1,5 @@
 """Bug 1: 2025 Frame reports REST PowerState=standby while Art Mode is ON."""
 
-import pytest
-
 
 async def test_in_artmode_true_when_rest_standby_but_artws_on(art_client, monkeypatch):
     # REST says the TV is off/standby (the live bug on TQ50LS03FAUXXC)...

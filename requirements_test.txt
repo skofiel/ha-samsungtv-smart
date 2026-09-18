@@ -1,10 +1,28 @@
-# Strictly for tests
+# Test-only requirements.
+#
+#   python3.13 -m venv .venv && . .venv/bin/activate
+#   pip install -r requirements_test.txt
+#   pytest
+#
+# pytest-homeassistant-custom-component pins the Home Assistant version the
+# suite runs against, so `homeassistant` is deliberately not pinned separately
+# here — listing both lets them drift apart. It requires Python 3.13, which is
+# what .github/workflows/tests.yaml uses.
 pytest==8.3.5
-#pytest-cov==2.9.0
-#pytest-homeassistant
 pytest-homeassistant-custom-component==0.13.254
-# From our manifest.json for our custom component
+
+# aiodns 3.5 references pycares APIs that were removed in pycares 5. Without
+# this cap `import aiohttp` raises AttributeError and collection of the entire
+# suite aborts before a single test runs.
+pycares<5
+
+# From our manifest.json for our custom component.
+# pysmartthings is NOT listed: Home Assistant's own SmartThings integration
+# supplies it at runtime (we only declare it under after_dependencies), and
+# tests/conftest.py installs a stub for the modules that import it.
+# pillow-heif is optional (lazy import behind a guard in api/_image_prep.py).
 websocket-client!=1.4.0,>=0.58.0
 wakeonlan>=2.0.0
 aiofiles>=0.8.0
 casttube>=0.2.1
+Pillow>=10.0.0

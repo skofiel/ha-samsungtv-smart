@@ -9,8 +9,25 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    name: "Run the test suite before publishing"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # pytest-homeassistant-custom-component requires 3.13.
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+      - name: Install test requirements
+        run: pip install -r requirements_test.txt
+      - name: pytest
+        run: pytest tests -q
+
   detect-branch:
     name: "Detect target branch from release type"
+    needs: verify
     runs-on: ubuntu-latest
     outputs:
       target_branch: ${{ steps.detect.outputs.branch }}
@@ -51,6 +68,22 @@ jobs:
           ref: refs/heads/${{ needs.detect-branch.outputs.target_branch }}
           fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: "Refuse a version that goes backwards"
+        # 8.9.13 was published and then 8.8.13 the same day. HACS orders
+        # releases by version, so everyone who had taken 8.9.13 stopped being
+        # offered any update at all. Fail loudly instead of stranding them.
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          CURRENT=$(jq -r '.version' custom_components/samsungtv_smart/manifest.json)
+          HIGHEST=$(printf '%s\n%s\n' "$TAG" "$CURRENT" | sort -V | tail -1)
+          if [ "$TAG" != "$CURRENT" ] && [ "$HIGHEST" != "$TAG" ]; then
+            echo "::error::Release tag $TAG is lower than the version already on"\
+                 "${{ needs.detect-branch.outputs.target_branch }} ($CURRENT)."\
+                 "Delete this release and tag a version above $CURRENT."
+            exit 1
+          fi
+          echo "Tag $TAG is not a regression on $CURRENT."
+
       - name: "Update manifest.json"
         run: |
           jq '.version = "${{ github.event.release.tag_name }}"' \
