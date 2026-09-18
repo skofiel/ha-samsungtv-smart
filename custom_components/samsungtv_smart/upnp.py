@@ -9,6 +9,12 @@ import async_timeout
 
 DEFAULT_TIMEOUT = 0.2
 
+# A SOAP reply carrying one integer is a few hundred bytes. Reading without
+# a bound lets anything answering on the TV's UPnP port — the responses are
+# unauthenticated plain HTTP on the LAN — hand us an arbitrarily large body
+# to buffer and then parse.
+MAX_RESPONSE_BYTES = 64 * 1024
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -51,7 +57,7 @@ class SamsungUPnP:
                     data=body,
                     raise_for_status=True,
                 ) as resp:
-                    response = await resp.content.read()
+                    response = await resp.content.read(MAX_RESPONSE_BYTES)
                     self._connected = True
         except Exception as exc:  # pylint: disable=broad-except
             _LOGGER.debug(exc)
@@ -78,11 +84,7 @@ class SamsungUPnP:
         if response is None:
             return None
 
-        tree = ET.fromstring(response.decode("utf8"))
-        volume = None
-        for elem in tree.iter(tag="CurrentVolume"):
-            volume = elem.text
-        return volume
+        return _first_tag_text(response, "CurrentVolume")
 
     async def async_set_volume(self, volume):
         """Set the volume level."""
@@ -100,13 +102,14 @@ class SamsungUPnP:
         if response is None:
             return None
 
-        tree = ET.fromstring(response.decode("utf8"))
-        mute = None
-        for elem in tree.iter(tag="CurrentMute"):
-            mute = elem.text
+        mute = _first_tag_text(response, "CurrentMute")
         if mute is None:
             return None
-        return int(mute) != 0
+        try:
+            return int(mute) != 0
+        except ValueError:
+            _LOGGER.debug("UPnP: non-numeric CurrentMute %r", mute)
+            return None
 
     async def async_set_current_media(self, url):
         """Set media to playback and play it."""
@@ -128,3 +131,24 @@ class SamsungUPnP:
     async def async_play(self):
         """Play media that was already set as current."""
         await self._soap_request("Play", "<Speed>1</Speed>", "AVTransport")
+
+
+def _first_tag_text(response: bytes, tag: str) -> Optional[str]:
+    """Return the text of the first ``tag`` element, or None if unreadable.
+
+    Every caller already treats None as "could not read", and none of them
+    guarded the parse: a malformed or non-UTF-8 reply raised out of
+    async_get_volume / async_get_mute, up through _update_volume_info and
+    _async_update, and failed the whole entity update rather than just the
+    optional volume read it came from.
+    """
+    try:
+        tree = ET.fromstring(response.decode("utf8"))
+    except (ET.ParseError, UnicodeDecodeError) as exc:
+        _LOGGER.debug("UPnP: could not parse the %s reply: %s", tag, exc)
+        return None
+
+    text = None
+    for elem in tree.iter(tag=tag):
+        text = elem.text
+    return text

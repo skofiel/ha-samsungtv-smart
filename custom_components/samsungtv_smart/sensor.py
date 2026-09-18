@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
+import os
 import time
 from typing import Any
 
@@ -22,8 +23,6 @@ from homeassistant.const import (
     CONF_HOST,
     CONF_ID,
     CONF_NAME,
-    CONF_PORT,
-    CONF_TOKEN,
     LIGHT_LUX,
     EntityCategory,
     UnitOfEnergy,
@@ -41,7 +40,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from . import async_get_samsungtv_api_key
+from . import async_get_samsungtv_api_key, get_or_create_art_api
 from .api.art import SamsungTVAsyncArt, _DeviceLoggerAdapter
 from .api.ipcontrol import (
     SamsungIPControl,
@@ -63,17 +62,13 @@ from .const import (
     CONF_OAUTH_TOKEN,
     CONF_SLIDESHOW_API,
     CONF_ST_POLL_ON_INTERVAL,
-    CONF_WS_NAME,
-    DATA_ART_API,
     DATA_CFG,
     DATA_IP_CONTROL_STATE_COORDINATOR,
     DEFAULT_IP_CONTROL_POLL_INTERVAL,
-    DEFAULT_PORT,
     DEFAULT_ST_POLL_ON_INTERVAL,
     DOMAIN,
     ST_POLL_OFF_INTERVAL,
     TUNER_INPUT_SOURCES,
-    WS_PREFIX,
     ip_control_port,
 )
 from .token_notify import METHOD_IP_CONTROL, clear_token_problem, notify_token_problem
@@ -276,9 +271,6 @@ async def async_setup_entry(  # noqa: C901
     """Set up the Samsung Frame Art sensor from config entry."""
     config = hass.data[DOMAIN][entry.entry_id][DATA_CFG]
     host = config[CONF_HOST]
-    port = config.get(CONF_PORT, DEFAULT_PORT)
-    token = config.get(CONF_TOKEN)
-    ws_name = config.get(CONF_WS_NAME, "HomeAssistant")
 
     # Get device unique ID - must match entity.py logic for device grouping
     device_unique_id = config.get(CONF_ID, entry.entry_id)
@@ -318,16 +310,7 @@ async def async_setup_entry(  # noqa: C901
     # Reuse the shared Art API instance (created in __init__.py) so all
     # platforms talk over a single art-app WebSocket; the TV misbehaves with
     # multiple clients on that channel. Create one only as a fallback.
-    art_api = hass.data[DOMAIN][entry.entry_id].get(DATA_ART_API)
-    if not art_api:
-        art_api = SamsungTVAsyncArt(
-            host=host,
-            port=port,
-            token=token,
-            session=session,
-            timeout=5,
-            name=f"{WS_PREFIX} {ws_name} Art",
-        )
+    art_api = get_or_create_art_api(hass, entry)
 
     # Check Frame TV support:
     # If already confirmed as a Frame TV (persisted flag), skip the live check.
@@ -362,18 +345,19 @@ async def async_setup_entry(  # noqa: C901
             )
 
     if is_supported:
-        # Create www/frame_art/{entry_id} directory if it doesn't exist
-        import os
-
+        # Create www/frame_art/{entry_id} directory if it doesn't exist.
+        # makedirs hits the filesystem, and this runs in the event loop during
+        # platform setup, so it goes to the executor.
         www_path = hass.config.path("www", "frame_art", entry.entry_id)
-        try:
-            os.makedirs(www_path, exist_ok=True)
-            _LOGGER.debug("Frame Art directory ready: %s", www_path)
-        except Exception as ex:
-            _LOGGER.warning("Could not create frame_art directory: %s", ex)
 
-        # Store art_api in hass.data for sharing with media_player
-        hass.data[DOMAIN][entry.entry_id][DATA_ART_API] = art_api
+        def _ensure_frame_art_dir() -> None:
+            try:
+                os.makedirs(www_path, exist_ok=True)
+                _LOGGER.debug("Frame Art directory ready: %s", www_path)
+            except OSError as ex:
+                _LOGGER.warning("Could not create frame_art directory: %s", ex)
+
+        await hass.async_add_executor_job(_ensure_frame_art_dir)
 
         # Create the coordinator
         coordinator = FrameArtCoordinator(hass, art_api, entry)
@@ -1062,8 +1046,6 @@ class FrameArtCoordinator(DataUpdateCoordinator):
 
     def _has_current_thumbnail(self) -> bool:
         """Check if current thumbnail file exists."""
-        import os
-
         www_path = self._hass.config.path(
             "www", "frame_art", self._entry.entry_id, "current.jpg"
         )
@@ -1269,8 +1251,6 @@ class FrameArtCoordinator(DataUpdateCoordinator):
         transport issue (TV busy, WebSocket lag, Art API returning empty data).
         """
         try:
-            import os
-
             www_path = self._hass.config.path("www", "frame_art", self._entry.entry_id)
 
             def _write_placeholder():
@@ -1322,8 +1302,6 @@ class FrameArtCoordinator(DataUpdateCoordinator):
         failure, left quietly for the next ``image_added`` / ``image_selected``
         broadcast to retrigger.
         """
-        import os
-
         # Fast path: if this artwork's thumbnail was already downloaded in a
         # previous cycle (personal/store/other), promote that local copy to
         # current.jpg straight away and skip the live TV fetch. Downloaded
@@ -1528,7 +1506,6 @@ class FrameArtCoordinator(DataUpdateCoordinator):
 
         Returns True if a cached copy was found and promoted to current.jpg.
         """
-        import os
         import shutil
 
         www_path = self._hass.config.path("www", "frame_art", self._entry.entry_id)
@@ -1821,8 +1798,6 @@ class FrameArtFolderSensor(SensorEntity):
 
     async def async_update(self) -> None:
         """Scan the subdirectory and refresh file list + total size."""
-        import os
-
         www_path = self.hass.config.path(
             "www", "frame_art", self._entry.entry_id, self._subdir
         )
@@ -2172,8 +2147,6 @@ class FrameArtSensor(CoordinatorEntity, SensorEntity):
         try:
             thumbnail_data = await self._art_api.get_thumbnail(content_id, timeout=30)
             if thumbnail_data:
-                import os
-
                 www_path = self.hass.config.path(
                     "www", "frame_art", self._entry.entry_id
                 )

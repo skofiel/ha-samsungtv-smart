@@ -705,17 +705,23 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         )
         self._rest_api.register_port_callback(self._persist_rest_port)
 
-        # Frame Art API - use shared instance if available, otherwise create new one
-        shared_art_api = entry_data.get(DATA_ART_API) if entry_data else None
-        if shared_art_api:
-            self._art_api = shared_art_api
-            self._log.debug("Using shared Frame Art API instance")
-            # Disable the old SamsungArt thread in samsungws.py to prevent
-            # competing WebSocket connections on the art-app channel.
-            # Multiple clients cause the TV to route d2d_service_message
-            # responses unpredictably, resulting in art.py timeouts.
-            self._ws.disable_art_thread()
-        else:
+        # The one Art API instance for this entry. async_setup_entry creates it
+        # before forwarding platforms, so this normally just picks it up.
+        #
+        # The previous fallback built its own on a miss and — unlike the sensor
+        # and switch fallbacks — never stored it, so a miss produced a second,
+        # invisible client on a channel that tolerates exactly one. It also sat
+        # in an else branch that skipped disable_art_thread(), leaving the
+        # legacy WebSocket art thread running as a third contender. Registering
+        # whatever we build keeps the invariant either way.
+        self._art_api = entry_data.get(DATA_ART_API) if entry_data else None
+        if self._art_api is None:
+            self._log.error(
+                "Frame Art API missing from hass.data for %s; creating and "
+                "registering one. This means async_setup_entry did not run "
+                "first, which should not happen",
+                self._host,
+            )
             self._art_api = SamsungTVAsyncArt(
                 host=self._host,
                 port=config.get(CONF_PORT, DEFAULT_PORT),
@@ -728,6 +734,12 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     CONF_SUPPORTS_GET_COLOR_TEMPERATURE
                 ),
             )
+            if entry_data is not None:
+                entry_data[DATA_ART_API] = self._art_api
+        # Stop the legacy SamsungArt thread in samsungws.py either way: two
+        # clients on the art-app channel make the TV route d2d_service_message
+        # responses unpredictably, which shows up as 100% timeouts in art.py.
+        self._ws.disable_art_thread()
         self._art_api.register_capability_callback(self._persist_art_capability)
         self._art_api.register_port_callback(self._persist_art_port)
         self._art_api.register_art_event_callback(self._on_art_transition)
