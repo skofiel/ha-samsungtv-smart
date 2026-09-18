@@ -28,10 +28,20 @@ PLATFORMS = {
     "switch.py": "switch",
 }
 
-# Keys that resolve from something other than a literal in the class body.
-# IP_CONTROL_PICTURE_SETTINGS drives five sliders from `setting.key`.
+# Keys that resolve from something other than a literal in the class body, and
+# so cannot be seen by the AST walk below.
 DYNAMIC_KEYS = {
+    # IP_CONTROL_PICTURE_SETTINGS drives five sliders from `setting.key`.
     "number": {"contrast", "brightness", "sharpness", "color", "tint"},
+    # SmartThingsPowerConsumptionSensor._MEASURES drives five sensors from the
+    # per-measure suffix.
+    "sensor": {
+        "power",
+        "energy",
+        "energy_difference",
+        "power_energy",
+        "energy_saved",
+    },
 }
 
 

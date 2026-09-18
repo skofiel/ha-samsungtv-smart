@@ -322,6 +322,24 @@
       },
       "brightness_intensity": {
         "name": "Brightness Intensity"
+      },
+      "illuminance": {
+        "name": "Light Level"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "energy": {
+        "name": "Energy"
+      },
+      "energy_difference": {
+        "name": "Energy difference"
+      },
+      "power_energy": {
+        "name": "Power energy"
+      },
+      "energy_saved": {
+        "name": "Energy saved"
       }
     }
   }
