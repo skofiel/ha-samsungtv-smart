@@ -7,10 +7,6 @@
 
 A custom integration for Home Assistant to control Samsung Smart TVs (Tizen OS), based on the excellent work of [ollo69/ha-samsungtv-smart](https://github.com/ollo69/ha-samsungtv-smart).
 
-If this project is useful to you, you can support its development:
-
-<a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 **What this fork adds.** It began as a handful of Frame TV fixes and grew a
 second control channel. Next to the WebSocket and SmartThings paths it now
 speaks Samsung's local **IP Control** (JSON-RPC), so power, input, volume,
