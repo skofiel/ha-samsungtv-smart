@@ -4,8 +4,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 📌 Read before opening an issue
-    url: https://github.com/TheFab21/ha-samsungtv-smart/issues/224
+    url: https://github.com/skofiel/ha-samsungtv-smart#troubleshooting
     about: What a usable bug report needs, how to produce a debug log, and the checks that often show the problem is elsewhere.
   - name: Documentation
-    url: https://github.com/TheFab21/ha-samsungtv-smart#readme
+    url: https://github.com/skofiel/ha-samsungtv-smart#readme
     about: Setup, entities, services, and a troubleshooting section covering the most common failures.
