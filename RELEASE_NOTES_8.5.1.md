@@ -1,9 +1,5 @@
 # Release notes — 8.5.1
 
-If this project is useful to you, you can support its development:
-
-# <a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 > **Status: stable release.** A maintenance release on top of 8.5.0 — no
 > breaking changes and no configuration to touch. It makes the new upload card
 > actually reliable on 2024 Frames, fixes OAuth for multi-TV setups, and adds a

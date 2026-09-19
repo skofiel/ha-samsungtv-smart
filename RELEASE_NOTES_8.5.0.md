@@ -1,9 +1,5 @@
 # Release notes — 8.5.0
 
-If this project is useful to you, you can support its development:
-
-# <a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 > **Status: stable release.** Builds on 8.4.0 — no breaking changes. The only
 > new moving part is an optional bundled Lovelace card; everything else is
 > unchanged.

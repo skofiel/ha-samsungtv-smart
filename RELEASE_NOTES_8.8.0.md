@@ -1,9 +1,5 @@
 # Release notes — 8.8.0
 
-If this project is useful to you, you can support its development:
-
-# <a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 > **Status: stable release.** This note covers everything since **8.7.1**
 > (8.7.2 → 8.7.9 plus this release). Nothing to reconfigure. Two things may
 > change what you see in the log or in an automation — both are called out

@@ -1,9 +1,5 @@
 # Release notes — 8.3.4
 
-If this project is useful to you, you can support its development:
-
-# <a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 > **Focus: Art Mode reliability on 2024/2025 Frames** — the art WebSocket now
 > heals itself instead of staying dead until a reload, plus firmware-compat
 > fixes. Several changes contributed by the community (thanks!).

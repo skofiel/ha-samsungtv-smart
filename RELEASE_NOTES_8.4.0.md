@@ -1,9 +1,5 @@
 # Release notes — 8.4.0
 
-If this project is useful to you, you can support its development:
-
-# <a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 > **Status: stable release.** 8.4.0 also folds in the entire **8.3.4** line
 > (Art Mode reliability + 2024/2025 firmware-compat), which was only ever
 > published as betas — see *"Also included: the 8.3.4 Art Mode reliability

@@ -1,9 +1,5 @@
 # Release notes — 8.3.3
 
-If this project is useful to you, you can support its development:
-
-# <a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 ## Picture mode — the option list now follows the active input (8.3.3b1, #116)
 
 - **Fix: the Picture Mode dropdown could get stuck on the wrong input's modes.**

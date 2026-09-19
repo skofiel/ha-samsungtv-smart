@@ -1,9 +1,5 @@
 # Release notes — 8.3.0 (since 8.1.0)
 
-If this project is useful to you, you can support its development:
-
-# <a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 > **Status: stable release.** 8.3.0 is the next stable release after **8.1.0**.
 > The 8.2.0 beta was never shipped as a stable release, so **8.3.0 includes
 > everything from 8.2.0 as well** — those changes are listed under

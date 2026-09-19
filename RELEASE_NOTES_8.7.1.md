@@ -1,9 +1,5 @@
 # Release notes — 8.7.1
 
-If this project is useful to you, you can support its development:
-
-# <a href="https://buymeacoffee.com/thefab21" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-black.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 > **Status: stable release.** This note covers everything since **8.6.0**, so
 > it stands on its own if you are coming from 8.5.x. No breaking changes and
 > nothing to reconfigure — but see [One default changed](#one-default-changed)
