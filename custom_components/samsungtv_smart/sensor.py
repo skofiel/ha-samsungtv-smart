@@ -1773,6 +1773,13 @@ class FrameArtFolderSensor(SensorEntity):
     _attr_icon = "mdi:folder-image"
     _attr_native_unit_of_measurement = "MB"
     _attr_should_poll = True
+    # Off by default: these exist to feed folder-gallery-card, which most
+    # installs do not use. Three entities reporting the size in MB of a local
+    # thumbnail cache — usually 0.0 — are noise on the device page otherwise.
+    # Turn them on under Settings -> Devices & Services -> Entities when the
+    # card needs them. Existing entities keep whatever state they already have;
+    # this only changes what a fresh install creates enabled.
+    _attr_entity_registry_enabled_default = False
     # file_list grows with the number of thumbnails and can exceed the
     # recorder's 16 KiB per-state attribute limit on TVs with many artworks.
     # Keep it live for folder-gallery-card but out of the database history.
