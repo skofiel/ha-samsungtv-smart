@@ -89,14 +89,31 @@ jobs:
           jq '.version = "${{ github.event.release.tag_name }}"' \
             custom_components/samsungtv_smart/manifest.json > tmp.json
           mv tmp.json custom_components/samsungtv_smart/manifest.json
-      - name: "Commit and push"
+      - name: "Commit, push, and move the tag onto the bump"
+        # Publishing a release creates its tag at whatever the branch head was,
+        # which is the commit *before* this bump — so the tag's tree carried the
+        # PREVIOUS version in manifest.json. HACS names the install after the
+        # tag while Home Assistant reads the manifest, so every release showed
+        # up as two different versions in the two places (HACS "8.10.2", HA
+        # "8.10.1").
+        #
+        # The tag is seconds old and nothing has fetched it yet, so moving it
+        # onto the bump commit is safe and makes the two agree. The release
+        # keeps pointing at the same tag name, now with the right tree.
         run: |
+          TAG="${{ github.event.release.tag_name }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add custom_components/samsungtv_smart/manifest.json
-          git diff --staged --quiet || \
-            git commit -m "chore: bump manifest version to ${{ github.event.release.tag_name }}"
+          if git diff --staged --quiet; then
+            echo "manifest.json already reads $TAG; leaving the tag where it is."
+            exit 0
+          fi
+          git commit -m "chore: bump manifest version to $TAG"
           git push origin refs/heads/${{ needs.detect-branch.outputs.target_branch }}
+          git tag -f "$TAG"
+          git push -f origin "refs/tags/$TAG"
+          echo "Tag $TAG now points at the commit that sets manifest version $TAG."
 
   release:
     name: "Release"

@@ -7,17 +7,17 @@
     "local_file"
   ],
   "codeowners": [
-    "@TheFab21"
+    "@skofiel"
   ],
   "config_flow": true,
   "dependencies": [
     "http",
     "application_credentials"
   ],
-  "documentation": "https://github.com/TheFab21/ha-samsungtv-smart",
+  "documentation": "https://github.com/skofiel/ha-samsungtv-smart",
   "integration_type": "device",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/TheFab21/ha-samsungtv-smart/issues",
+  "issue_tracker": "https://github.com/skofiel/ha-samsungtv-smart/issues",
   "requirements": [
     "websocket-client!=1.4.0,>=0.58.0",
     "wakeonlan>=2.0.0",

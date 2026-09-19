@@ -1,11 +1,13 @@
 # SamsungTV Smart and Art Mode
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/github/v/release/TheFab21/ha-samsungtv-smart?style=flat&color=blue)](https://github.com/TheFab21/ha-samsungtv-smart/releases/latest)
+[![Version](https://img.shields.io/github/v/release/skofiel/ha-samsungtv-smart?style=flat&color=blue)](https://github.com/skofiel/ha-samsungtv-smart/releases/latest)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-%3E%3D2025.6.0-green.svg)](https://www.home-assistant.io)
 [![License: LGPL v2.1](https://img.shields.io/badge/License-LGPL%20v2.1-yellow.svg)](https://www.gnu.org/licenses/lgpl-2.1)
 
-A custom integration for Home Assistant to control Samsung Smart TVs (Tizen OS), based on the excellent work of [ollo69/ha-samsungtv-smart](https://github.com/ollo69/ha-samsungtv-smart).
+A custom integration for Home Assistant to control Samsung Smart TVs (Tizen OS).
+
+This is a fork of [TheFab21/ha-samsungtv-smart](https://github.com/TheFab21/ha-samsungtv-smart), itself based on the excellent work of [ollo69/ha-samsungtv-smart](https://github.com/ollo69/ha-samsungtv-smart). Almost everything here is theirs; this fork adds a test suite that runs in CI, a release that cannot ship over a red one, and the fixes listed in its releases. Links to upstream issues and pull requests are kept as citations of where a measurement came from.
 
 **What this fork adds.** It began as a handful of Frame TV fixes and grew a
 second control channel. Next to the WebSocket and SmartThings paths it now
@@ -115,7 +117,7 @@ This fork is a drop-in replacement for ollo69's integration. Migration is straig
 
 3. **Restart Home Assistant** before proceeding. This ensures the old domain is fully cleared from HA's internal registry.
 
-4. **Install this fork** via HACS (add `https://github.com/TheFab21/ha-samsungtv-smart` as a custom repository, see [Installation](#installation)), then restart Home Assistant again.
+4. **Install this fork** via HACS (add `https://github.com/skofiel/ha-samsungtv-smart` as a custom repository, see [Installation](#installation)), then restart Home Assistant again.
 
 5. **Verify files are on disk** before trying to add the integration:
    ```bash
@@ -144,11 +146,11 @@ This fork is a drop-in replacement for ollo69's integration. Migration is straig
 
 ### HACS (recommended)
 
-[![Open your Home Assistant instance and add a custom repository.](https://my.home-assistant.io/badges/hacs_custom_repository.svg)](https://my.home-assistant.io/redirect/hacs_custom_repository/?owner=TheFab21&repository=ha-samsungtv-smart&category=integration)
+[![Open your Home Assistant instance and add a custom repository.](https://my.home-assistant.io/badges/hacs_custom_repository.svg)](https://my.home-assistant.io/redirect/hacs_custom_repository/?owner=skofiel&repository=ha-samsungtv-smart&category=integration)
 
 Or manually add the custom repository in HACS:
 1. Go to **HACS → Integrations → ⋮ → Custom repositories**
-2. Add `https://github.com/TheFab21/ha-samsungtv-smart` as **Integration**
+2. Add `https://github.com/skofiel/ha-samsungtv-smart` as **Integration**
 3. Search for **SamsungTV Smart** and install
 
 
